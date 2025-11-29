@@ -1,53 +1,64 @@
 const Sidebar = ({ items, activeSection, open, onClose, onSelect }) => (
   <>
-    <aside className={`sidebar ${open ? "open" : ""}`} id="sidebar">
-      <div className="sidebar__brand">
-        <div className="sidebar__logo">VB</div>
-        <div className="sidebar__meta">
-          <p>Vedam Study Buddy</p>
-          <small>Contest Analytics</small>
+    <aside
+      className={`fixed inset-y-0 left-0 z-10 w-[280px] bg-slate-900 text-slate-100 flex flex-col p-6 transition-transform duration-200 ease-in-out ${
+        open ? "translate-x-0" : "-translate-x-full"
+      } lg:translate-x-0`}
+      id="sidebar"
+    >
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg">
+            VB
+          </div>
+          <div>
+            <p className="font-semibold text-sm">Vedam Study Buddy</p>
+            <small className="text-xs text-slate-400">Contest Analytics</small>
+          </div>
         </div>
-        <button className="sidebar__collapse" type="button" onClick={onClose}>
+        <button
+          className="lg:hidden text-slate-400 hover:text-white px-2 py-1 text-sm"
+          type="button"
+          onClick={onClose}
+        >
           Hide
         </button>
       </div>
 
-      <nav className="sidebar__nav">
+      <nav className="flex-1 space-y-1">
         {items.map((item) => (
           <button
             key={item.id}
             type="button"
-            className={`nav-link ${activeSection === item.id ? "active" : ""}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+              activeSection === item.id
+                ? "bg-emerald-600 text-white"
+                : "text-slate-300 hover:bg-slate-800 hover:text-white"
+            }`}
             onClick={() => onSelect(item.id)}
           >
-            <span className="nav-link__icon">{item.icon}</span>
-            <span className="nav-link__text">
-              {item.label}
-              <small>{item.tagline}</small>
+            <span className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-semibold">
+              {item.icon}
+            </span>
+            <span className="flex-1">
+              <span className="block text-sm font-medium">{item.label}</span>
+              <small className="block text-xs opacity-75">{item.tagline}</small>
             </span>
           </button>
         ))}
       </nav>
-
-      <div className="sidebar__footer">
-        <p className="sidebar__footer-title">Need a reset?</p>
-        <p className="sidebar__footer-text">
-          Schedule a 5 minute stretch or reflection break to keep clarity high.
-        </p>
-        <button className="sidebar__footer-btn" type="button">
-          Start Quick Break
-        </button>
-      </div>
     </aside>
 
-    <button
-      type="button"
-      className={`sidebar__backdrop ${open ? "visible" : ""}`}
-      aria-label="Close navigation"
-      onClick={onClose}
-    >
-      <span className="sr-only">Close navigation</span>
-    </button>
+    {open && (
+      <button
+        type="button"
+        className="fixed inset-0 bg-black bg-opacity-50 z-[5] lg:hidden"
+        aria-label="Close navigation"
+        onClick={onClose}
+      >
+        <span className="sr-only">Close navigation</span>
+      </button>
+    )}
   </>
 );
 
