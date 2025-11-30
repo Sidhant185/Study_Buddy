@@ -740,17 +740,18 @@ aside button[class*="bg-emerald-600"]::before {
     transform: translateX(0) !important;
   }
   
-  /* When parent uses grid layout, make sidebar relative so it's in flow */
+  /* When parent uses grid layout, make sidebar sticky so it stays in place when scrolling */
   /* Target aside inside grid container */
   .lg\:grid > aside,
   .lg\:grid aside[class*="fixed"] {
-    position: relative !important;
+    position: sticky !important;
+    top: 0 !important;
     transform: none !important;
     left: auto !important;
     width: 100% !important;
-    height: auto !important;
-    top: auto !important;
+    height: 100vh !important;
     bottom: auto !important;
+    overflow-y: auto !important;
   }
   
   /* Ensure main content is visible and properly sized */

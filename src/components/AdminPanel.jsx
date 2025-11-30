@@ -15,8 +15,10 @@ import {
   getTopicAnalytics,
   createSubmission,
   parseTestCases,
+  upsertImpTopics,
+  normalizeTopicName,
 } from "../services/firestore.js";
-import { evaluateCodeSubmission } from "../services/cursorAI.js";
+import { evaluateCodeSubmission, analyzeQuestionTopics } from "../services/cursorAI.js";
 import MonacoCodeEditor from "./MonacoCodeEditor.jsx";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "../firebase/config.js";
@@ -479,6 +481,32 @@ const AdminPanel = ({ onExit }) => {
       questions: [...prev.questions, question],
     }));
 
+    // Analyze topics asynchronously (non-blocking)
+    (async () => {
+      try {
+        const topics = await analyzeQuestionTopics({
+          title: question.title,
+          description: question.description,
+          expectedSolution: question.expectedSolution,
+          testCases: question.testCases,
+        });
+
+        if (topics && topics.length > 0) {
+          // Prepare topic updates (all topics get +1)
+          const topicUpdates = {};
+          topics.forEach(topic => {
+            topicUpdates[topic] = 1;
+          });
+
+          await upsertImpTopics(topicUpdates);
+          console.log(`✅ handleAddQuestion: Updated impTopics for question "${question.title}"`);
+        }
+      } catch (error) {
+        // Silently handle errors - don't block UI
+        console.error('handleAddQuestion: Topic analysis failed:', error);
+      }
+    })();
+
     // Reset form for next question
     setCurrentQuestion({
       questionNumber: question.questionNumber + 1,
@@ -553,6 +581,56 @@ const AdminPanel = ({ onExit }) => {
         difficulty: "medium",
       });
       await loadJavaContests();
+
+      // Analyze topics for all questions asynchronously (non-blocking)
+      if (javaContestForm.questions.length > 0) {
+        (async () => {
+          try {
+            const allTopics = {};
+            
+            // Analyze each question with small delay to avoid rate limits
+            for (let i = 0; i < javaContestForm.questions.length; i++) {
+              const question = javaContestForm.questions[i];
+              
+              try {
+                const topics = await analyzeQuestionTopics({
+                  title: question.title,
+                  description: question.description,
+                  expectedSolution: question.expectedSolution || "",
+                  testCases: question.testCases || [],
+                });
+
+                // Collect all topics
+                if (topics && topics.length > 0) {
+                  topics.forEach(topic => {
+                    const normalized = normalizeTopicName(topic);
+                    if (normalized) {
+                      allTopics[normalized] = (allTopics[normalized] || 0) + 1;
+                    }
+                  });
+                }
+
+                // Small delay between API calls to avoid rate limits
+                if (i < javaContestForm.questions.length - 1) {
+                  await new Promise(resolve => setTimeout(resolve, 200));
+                }
+              } catch (error) {
+                console.error(`Failed to analyze topics for question ${i + 1}:`, error);
+                // Continue with next question
+              }
+            }
+
+            // Update impTopics once with all collected topics
+            if (Object.keys(allTopics).length > 0) {
+              await upsertImpTopics(allTopics);
+              console.log(`✅ handleSaveJavaContest: Updated impTopics for ${Object.keys(allTopics).length} unique topics`);
+            }
+          } catch (error) {
+            // Silently handle errors - don't block UI
+            console.error('handleSaveJavaContest: Topic analysis failed:', error);
+          }
+        })();
+      }
     } catch (error) {
       console.error("Failed to create Java contest", error);
       showFeedback("error", "Failed to create Java contest. Please retry.");

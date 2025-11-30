@@ -1131,6 +1131,38 @@ Rules:
       
       let cleanedResponse = response.trim();
       
+      // Clean up unescaped newlines and control characters in JSON strings
+      // Helper function to escape JSON string content
+      const escapeJsonString = (str) => {
+        return str
+          .replace(/\\/g, '\\\\')  // Escape backslashes first
+          .replace(/"/g, '\\"')     // Escape quotes
+          .replace(/\n/g, '\\n')    // Escape newlines
+          .replace(/\r/g, '\\r')    // Escape carriage returns
+          .replace(/\t/g, '\\t')    // Escape tabs
+          .replace(/\f/g, '\\f')    // Escape form feeds
+          .replace(/\v/g, '\\v');   // Escape vertical tabs
+      };
+      
+      // Fix codeTemplate fields - they often have unescaped newlines
+      // Use [\s\S] to match any character including newlines, non-greedy with lookahead
+      cleanedResponse = cleanedResponse.replace(/"codeTemplate"\s*:\s*"([\s\S]*?)"(?=\s*[,}])/g, (match, content) => {
+        const escaped = escapeJsonString(content);
+        return `"codeTemplate": "${escaped}"`;
+      });
+      
+      // Fix test case input fields that might have unescaped newlines
+      cleanedResponse = cleanedResponse.replace(/"input"\s*:\s*"([\s\S]*?)"(?=\s*[,}])/g, (match, content) => {
+        const escaped = escapeJsonString(content);
+        return `"input": "${escaped}"`;
+      });
+      
+      // Fix description fields that might have unescaped newlines
+      cleanedResponse = cleanedResponse.replace(/"description"\s*:\s*"([\s\S]*?)"(?=\s*[,}])/g, (match, content) => {
+        const escaped = escapeJsonString(content);
+        return `"description": "${escaped}"`;
+      });
+      
       const findBalancedJSON = (str) => {
         let start = str.indexOf('{');
         if (start === -1) return null;
@@ -1187,6 +1219,18 @@ Rules:
         }
       }
       
+      // Post-process: Convert escaped newlines back to actual newlines in codeTemplate for display
+      if (questionData.questions) {
+        questionData.questions = questionData.questions.map(q => ({
+          ...q,
+          codeTemplate: q.codeTemplate?.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r') || q.codeTemplate,
+          testCases: q.testCases?.map(tc => ({
+            ...tc,
+            input: tc.input?.replace(/\\n/g, '\n') || tc.input,
+          })) || q.testCases,
+        }));
+      }
+      
       console.log("✅ Successfully parsed Java coding questions:", {
         questionCount: questionData.questions?.length
       });
@@ -1196,7 +1240,7 @@ Rules:
       if (positionMatch) {
         const pos = parseInt(positionMatch[1]);
         console.error("❌ Parse Error at position:", pos);
-        console.error("❌ Context around error:", response.substring(Math.max(0, pos - 50), pos + 50));
+        console.error("❌ Context around error:", cleanedResponse.substring(Math.max(0, pos - 50), pos + 50));
       }
       console.error("❌ Failed Response (first 1000 chars):", response.substring(0, 1000));
       throw new Error(`Failed to parse questions response: ${parseError.message}. Please try again.`);
@@ -1214,6 +1258,96 @@ Rules:
   } catch (error) {
     console.error("Java coding questions generation error:", error);
     throw error;
+  }
+}
+
+/**
+ * Analyze question to identify topics using Gemini API
+ * @param {Object} params - Question parameters
+ * @param {string} params.title - Question title
+ * @param {string} params.description - Question description
+ * @param {string} params.expectedSolution - Reference solution code
+ * @param {Array} params.testCases - Test cases array
+ * @returns {Promise<Array<string>>} Array of normalized topic names (e.g., ["arrays", "loops", "conditional statements"])
+ */
+export async function analyzeQuestionTopics({ title, description, expectedSolution, testCases }) {
+  const systemPrompt = `You are an expert Java programming instructor analyzing coding questions to identify topics.
+Return ONLY a JSON array of topic names, no markdown, no explanations.`;
+
+  const userPrompt = `Analyze the following Java coding question and identify ALL relevant topics:
+
+**Title:** ${title || "Untitled"}
+
+**Description:**
+${description || "No description provided"}
+
+**Reference Solution:**
+\`\`\`java
+${expectedSolution || "// No solution provided"}
+\`\`\`
+
+**Test Cases:**
+${Array.isArray(testCases) && testCases.length > 0
+  ? testCases.map((tc, i) => {
+      const input = tc?.input || tc?.inputValue || "";
+      const output = tc?.expectedOutput || tc?.output || "";
+      return `Test ${i + 1}: Input="${input}", Expected="${output}"`;
+    }).join("\n")
+  : "No test cases provided"}
+
+Return a JSON array of topic names. Each topic should be a common Java programming concept.
+Examples: "arrays", "2d arrays", "strings", "loops", "conditional statements", "hashmap", "recursion", "dynamic programming", "graphs", "trees", "sorting", "searching", "object-oriented programming", "inheritance", "polymorphism", "exception handling", etc.
+
+Return ONLY this format (no markdown):
+["topic1", "topic2", "topic3"]
+
+Identify 1-5 relevant topics. Be specific but use common topic names.`;
+
+  try {
+    const response = await callGeminiAPI(systemPrompt, userPrompt, {
+      temperature: 0.3, // Lower temperature for more consistent topic identification
+      max_tokens: 500, // Small response needed
+      timeout: 30000, // 30 second timeout
+    });
+
+    // Parse JSON response
+    let topics = [];
+    try {
+      let cleanedResponse = response.trim();
+      
+      // Remove markdown code fences if present
+      const jsonMatch = cleanedResponse.match(/```(?:json)?\s*(\[[\s\S]*\])\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        topics = JSON.parse(jsonMatch[1]);
+      } else {
+        // Try parsing the entire response as JSON
+        topics = JSON.parse(cleanedResponse);
+      }
+
+      // Validate it's an array
+      if (!Array.isArray(topics)) {
+        console.warn('analyzeQuestionTopics: Response is not an array, converting');
+        topics = [topics].filter(Boolean);
+      }
+
+      // Normalize topic names (lowercase, trim)
+      topics = topics
+        .filter(t => t && typeof t === 'string')
+        .map(t => t.toLowerCase().trim())
+        .filter(t => t.length > 0);
+
+      console.log(`✅ analyzeQuestionTopics: Identified ${topics.length} topics:`, topics);
+      return topics;
+    } catch (parseError) {
+      console.warn('analyzeQuestionTopics: Failed to parse response as JSON:', parseError.message);
+      console.warn('Raw response:', response.substring(0, 200));
+      // Return empty array on parse failure (non-blocking)
+      return [];
+    }
+  } catch (error) {
+    console.error('analyzeQuestionTopics error:', error);
+    // Return empty array on error (non-blocking)
+    return [];
   }
 }
 

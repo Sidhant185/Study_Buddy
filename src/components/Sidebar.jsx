@@ -3,7 +3,7 @@ const Sidebar = ({ items, activeSection, open, onClose, onSelect }) => (
     <aside
       className={`fixed inset-y-0 left-0 z-10 w-[280px] bg-slate-900 text-slate-100 flex flex-col p-6 transition-transform duration-200 ease-in-out ${
         open ? "translate-x-0" : "-translate-x-full"
-      } lg:translate-x-0`}
+      } lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen`}
       id="sidebar"
     >
       <div className="flex items-center justify-between mb-8">

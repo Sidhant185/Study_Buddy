@@ -50,15 +50,12 @@ export function setCachedQuiz(subject, data) {
 }
 
 /**
- * Get cached Java custom practice questions
- * @param {Object} params - Practice parameters
- * @param {string} params.topics - Comma-separated topics
- * @param {string} params.difficulty - Difficulty level
+ * Get cached Java custom practice questions (single entry)
  * @returns {Object|null} Cached practice questions or null if not found
  */
-export function getCachedJavaPractice(params) {
+export function getCachedJavaPractice() {
   try {
-    const key = `java_practice_${params.topics}_${params.difficulty}`;
+    const key = 'java_custom_practice';
     const cached = localStorage.getItem(key);
     if (!cached) return null;
     
@@ -70,7 +67,7 @@ export function getCachedJavaPractice(params) {
 }
 
 /**
- * Store Java custom practice questions in cache
+ * Store Java custom practice questions in cache (single entry, overwrites previous)
  * @param {Object} params - Practice parameters
  * @param {string} params.topics - Comma-separated topics
  * @param {string} params.difficulty - Difficulty level
@@ -78,7 +75,7 @@ export function getCachedJavaPractice(params) {
  */
 export function setCachedJavaPractice(params, questions) {
   try {
-    const key = `java_practice_${params.topics}_${params.difficulty}`;
+    const key = 'java_custom_practice';
     localStorage.setItem(key, JSON.stringify({
       questions,
       params: {
@@ -99,12 +96,8 @@ export function clearAllCaches() {
     Object.values(CACHE_KEYS).forEach(key => {
       localStorage.removeItem(key);
     });
-    // Clear Java practice caches (they have dynamic keys)
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith('java_practice_')) {
-        localStorage.removeItem(key);
-      }
-    });
+    // Clear Java custom practice cache
+    localStorage.removeItem('java_custom_practice');
   } catch (error) {
     console.error('Error clearing caches:', error);
   }

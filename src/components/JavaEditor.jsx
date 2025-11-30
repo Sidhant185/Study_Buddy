@@ -14,6 +14,8 @@ import {
   upsertTopicAnalytics,
   createPracticeTask,
   parseTestCases,
+  getImpTopics,
+  normalizeTopicName,
 } from "../services/firestore.js";
 import { evaluateCodeSubmission, generateJavaCodingQuestions } from "../services/cursorAI.js";
 import { getCachedJavaPractice, setCachedJavaPractice } from "../services/cache.js";
@@ -40,6 +42,7 @@ const JavaEditor = ({ user, studentRecord }) => {
     topics: "",
     difficulty: "medium",
   });
+  const [practiceMode, setPracticeMode] = useState("specific"); // "specific" | "previous"
   const [generatingQuestions, setGeneratingQuestions] = useState(false);
   const [customQuestions, setCustomQuestions] = useState([]);
   const [isCustomPractice, setIsCustomPractice] = useState(false);
@@ -227,36 +230,99 @@ const JavaEditor = ({ user, studentRecord }) => {
     }
   };
 
-  const handleGenerateCustomQuestions = async (forceRefresh = false) => {
-    if (!customPracticeForm.topics.trim()) {
-      setError("Please enter at least one topic");
-      return;
+  /**
+   * Select topics by probability based on frequency counts
+   * @param {Object} impTopics - Object with topic names as keys and counts as values
+   * @param {number} count - Number of topics to select (default: 5)
+   * @returns {Array<string>} Array of selected topic names
+   */
+  const selectTopicsByProbability = (impTopics, count = 5) => {
+    const DEFAULT_TOPIC = normalizeTopicName("loops & conditional statements");
+    
+    // Handle empty or invalid input
+    if (!impTopics || typeof impTopics !== 'object' || Object.keys(impTopics).length === 0) {
+      console.log('selectTopicsByProbability: impTopics is empty, using default topic');
+      return [DEFAULT_TOPIC];
+    }
+
+    // Filter out metadata fields and get valid topics
+    const validTopics = Object.entries(impTopics)
+      .filter(([key, value]) => key !== 'updatedAt' && typeof value === 'number' && value > 0)
+      .map(([topic, count]) => ({ topic, count }));
+
+    if (validTopics.length === 0) {
+      return [DEFAULT_TOPIC];
+    }
+
+    // If only one topic, return it repeated
+    if (validTopics.length === 1) {
+      return Array(count).fill(validTopics[0].topic);
+    }
+
+    // Calculate total count
+    const totalCount = validTopics.reduce((sum, item) => sum + item.count, 0);
+    
+    // If all topics have same count, use uniform random
+    const allSameCount = validTopics.every(item => item.count === validTopics[0].count);
+    
+    const selectedTopics = [];
+    for (let i = 0; i < count; i++) {
+      if (allSameCount) {
+        // Uniform random selection
+        const randomIndex = Math.floor(Math.random() * validTopics.length);
+        selectedTopics.push(validTopics[randomIndex].topic);
+      } else {
+        // Weighted random selection using cumulative probability
+        const random = Math.random() * totalCount;
+        let cumulative = 0;
+        let selected = false;
+        
+        for (const item of validTopics) {
+          cumulative += item.count;
+          if (random <= cumulative) {
+            selectedTopics.push(item.topic);
+            selected = true;
+            break;
+          }
+        }
+        
+        // Safety fallback: if somehow no topic was selected, use the last one
+        if (!selected && validTopics.length > 0) {
+          selectedTopics.push(validTopics[validTopics.length - 1].topic);
+        }
+      }
+    }
+
+    return selectedTopics;
+  };
+
+  const handleGenerateCustomQuestions = async () => {
+    let topicsToUse = "";
+
+    if (practiceMode === "specific") {
+      if (!customPracticeForm.topics.trim()) {
+        setError("Please enter at least one topic");
+        return;
+      }
+      topicsToUse = customPracticeForm.topics.trim();
+    } else if (practiceMode === "previous") {
+      // Load impTopics and select by probability
+      try {
+        const impTopics = await getImpTopics();
+        const selectedTopics = selectTopicsByProbability(impTopics, 5);
+        topicsToUse = selectedTopics.join(", ");
+        console.log(`✅ Selected topics by probability: ${topicsToUse}`);
+      } catch (err) {
+        console.error("Failed to load impTopics:", err);
+        setError("Failed to load previous contest topics. Using default topic.");
+        topicsToUse = normalizeTopicName("loops & conditional statements");
+      }
     }
 
     const params = {
-      topics: customPracticeForm.topics.trim(),
+      topics: topicsToUse,
       difficulty: customPracticeForm.difficulty,
     };
-
-    // Check cache first if not forcing refresh
-    if (!forceRefresh) {
-      const cached = getCachedJavaPractice(params);
-      if (cached && cached.questions) {
-        const formattedQuestions = cached.questions.map((q, idx) => ({
-          ...q,
-          id: q.id || `custom-${idx}`,
-          questionNumber: q.questionNumber || (idx + 1),
-          testCases: q.testCases || [],
-        }));
-        setCustomQuestions(formattedQuestions);
-        setCustomPracticeModal(false);
-        setCurrentTestCaseIndex(0);
-        if (formattedQuestions.length > 0) {
-          setSelectedQuestion(formattedQuestions[0]);
-        }
-        return;
-      }
-    }
 
     setGeneratingQuestions(true);
     setError(null);
@@ -271,7 +337,7 @@ const JavaEditor = ({ user, studentRecord }) => {
         testCases: q.testCases || [],
       }));
       
-      // Cache the generated questions
+      // Cache the generated questions (overwrites previous cache)
       setCachedJavaPractice(params, generatedQuestions);
       
       setCustomQuestions(formattedQuestions);
@@ -289,13 +355,17 @@ const JavaEditor = ({ user, studentRecord }) => {
     }
   };
 
-  const handleRefreshCustomPractice = async () => {
-    if (!customPracticeForm.topics.trim()) {
-      setError("Please enter at least one topic first");
-      return;
+  const handleRefreshCustomPractice = () => {
+    // Always show popup to enter new topics/difficulty
+    // Pre-fill with cached params if available
+    const cached = getCachedJavaPractice();
+    if (cached && cached.params) {
+      setCustomPracticeForm({
+        topics: cached.params.topics || "",
+        difficulty: cached.params.difficulty || "medium",
+      });
     }
-    setRefreshingCustomPractice(true);
-    await handleGenerateCustomQuestions(true);
+    setCustomPracticeModal(true);
   };
 
   const handleEvaluateCustomPractice = async () => {
@@ -549,12 +619,10 @@ const JavaEditor = ({ user, studentRecord }) => {
                   setQuestions([]);
                   
                   // Check cache for existing custom practice
-                  const cached = getCachedJavaPractice({
-                    topics: customPracticeForm.topics.trim() || "",
-                    difficulty: customPracticeForm.difficulty,
-                  });
+                  const cached = getCachedJavaPractice();
                   
-                  if (cached && cached.questions && customPracticeForm.topics.trim()) {
+                  if (cached && cached.questions && cached.questions.length > 0) {
+                    // Cache exists - load directly, no popup
                     const formattedQuestions = cached.questions.map((q, idx) => ({
                       ...q,
                       id: q.id || `custom-${idx}`,
@@ -562,10 +630,17 @@ const JavaEditor = ({ user, studentRecord }) => {
                       testCases: q.testCases || [],
                     }));
                     setCustomQuestions(formattedQuestions);
+                    // Pre-fill form with cached params
+                    setCustomPracticeForm({
+                      topics: cached.params.topics || "",
+                      difficulty: cached.params.difficulty || "medium",
+                    });
                     if (formattedQuestions.length > 0) {
                       setSelectedQuestion(formattedQuestions[0]);
                     }
+                    setCustomPracticeModal(false); // Don't show popup
                   } else {
+                    // No cache - show popup to generate questions
                     setCustomQuestions([]);
                     setCustomPracticeModal(true);
                   }
@@ -839,19 +914,69 @@ const JavaEditor = ({ user, studentRecord }) => {
             </div>
             
             <div className="quiz-modal-content">
+              {/* Practice Mode Selection */}
               <div className="quiz-form-group">
                 <label className="quiz-form-label">
-                  Topics <span className="text-red-500">*</span>
+                  Practice Mode <span className="text-red-500">*</span>
                 </label>
-                <textarea
-                  value={customPracticeForm.topics}
-                  onChange={(e) => setCustomPracticeForm(prev => ({ ...prev, topics: e.target.value }))}
-                  placeholder="e.g., Arrays, Strings, OOP, Collections, Recursion (comma-separated)"
-                  className="quiz-form-textarea"
-                  rows="3"
-                />
-                <p className="text-xs text-slate-500 mt-1">Enter 1 or more topics separated by commas</p>
+                <div className="flex gap-4 mb-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="practiceMode"
+                      value="specific"
+                      checked={practiceMode === "specific"}
+                      onChange={(e) => setPracticeMode(e.target.value)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm font-medium">Specific Topic</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="practiceMode"
+                      value="previous"
+                      checked={practiceMode === "previous"}
+                      onChange={(e) => setPracticeMode(e.target.value)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm font-medium">Previous Contests</span>
+                  </label>
+                </div>
+                <p className="text-xs text-slate-500">
+                  {practiceMode === "specific" 
+                    ? "Enter specific topics you want to practice"
+                    : "Generate questions based on topics from previous contests"}
+                </p>
               </div>
+
+              {/* Specific Topic Input (only shown when mode is "specific") */}
+              {practiceMode === "specific" && (
+                <div className="quiz-form-group">
+                  <label className="quiz-form-label">
+                    Topics <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={customPracticeForm.topics}
+                    onChange={(e) => setCustomPracticeForm(prev => ({ ...prev, topics: e.target.value }))}
+                    placeholder="e.g., Arrays, Strings, OOP, Collections, Recursion (comma-separated)"
+                    className="quiz-form-textarea"
+                    rows="3"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Enter 1 or more topics separated by commas</p>
+                </div>
+              )}
+
+              {/* Previous Contests Info (only shown when mode is "previous") */}
+              {practiceMode === "previous" && (
+                <div className="quiz-form-group">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm text-blue-800">
+                      <strong>ℹ️ Previous Contests Mode:</strong> Questions will be generated based on topics that appeared most frequently in previous contests. Topics are selected by probability based on their frequency.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div className="quiz-form-group">
                 <label className="quiz-form-label">
@@ -876,7 +1001,7 @@ const JavaEditor = ({ user, studentRecord }) => {
 
               <button
                 onClick={handleGenerateCustomQuestions}
-                disabled={generatingQuestions || !customPracticeForm.topics.trim()}
+                disabled={generatingQuestions || (practiceMode === "specific" && !customPracticeForm.topics.trim())}
                 className="quiz-form-submit"
               >
                 {generatingQuestions ? (

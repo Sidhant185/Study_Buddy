@@ -10,6 +10,7 @@ import {
   setDoc,
   deleteDoc,
   serverTimestamp,
+  increment,
 } from "firebase/firestore";
 import { db } from "../firebase/config.js";
 
@@ -24,6 +25,7 @@ const COLLECTIONS = {
   evaluations: "evaluations", // Subcollection under submissions
   topicAnalytics: "topicAnalytics", // Per student per subject
   practiceTasks: "practiceTasks", // Per student
+  impTopics: "impTopics", // Global topic frequency tracking
 };
 
 const withId = (snap) => {
@@ -829,5 +831,77 @@ export async function listStudentEvaluations(studentId, subjectId = null) {
     const bTime = b.submittedAt?.seconds || 0;
     return bTime - aTime;
   });
+}
+
+/**
+ * Normalize topic name for consistent storage
+ * @param {string} topic - Topic name to normalize
+ * @returns {string} Normalized topic name (lowercase, trimmed)
+ */
+export function normalizeTopicName(topic) {
+  if (!topic || typeof topic !== 'string') return '';
+  return topic.toLowerCase().trim();
+}
+
+/**
+ * Upsert important topics (impTopics) - increments topic counts atomically
+ * @param {Object} topicUpdates - Object with topic names as keys and increment values (usually 1)
+ * @example upsertImpTopics({ "arrays": 1, "loops": 1 })
+ */
+export async function upsertImpTopics(topicUpdates) {
+  if (!topicUpdates || typeof topicUpdates !== 'object') {
+    console.warn('upsertImpTopics: Invalid topicUpdates provided');
+    return;
+  }
+
+  try {
+    const impTopicsRef = doc(db, COLLECTIONS.impTopics, "global");
+    const updates = {};
+    
+    // Normalize all topic names and prepare atomic increments
+    for (const [topicName, incrementValue] of Object.entries(topicUpdates)) {
+      const normalizedTopic = normalizeTopicName(topicName);
+      if (normalizedTopic) {
+        updates[normalizedTopic] = increment(incrementValue || 1);
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      console.warn('upsertImpTopics: No valid topics to update');
+      return;
+    }
+
+    // Add metadata
+    updates.updatedAt = serverTimestamp();
+
+    await setDoc(impTopicsRef, updates, { merge: true });
+    console.log(`✅ upsertImpTopics: Updated ${Object.keys(updates).length} topics`);
+  } catch (error) {
+    console.error('upsertImpTopics error:', error);
+    throw new Error(`Failed to update impTopics: ${error.message}`);
+  }
+}
+
+/**
+ * Get all important topics with their counts
+ * @returns {Promise<Object|null>} Object with topic names as keys and counts as values, or null if not found
+ */
+export async function getImpTopics() {
+  try {
+    const impTopicsRef = doc(db, COLLECTIONS.impTopics, "global");
+    const snap = await getDoc(impTopicsRef);
+    
+    if (!snap.exists()) {
+      return null;
+    }
+
+    const data = snap.data();
+    // Remove metadata fields, return only topic counts
+    const { updatedAt, ...topics } = data;
+    return topics;
+  } catch (error) {
+    console.error('getImpTopics error:', error);
+    throw new Error(`Failed to get impTopics: ${error.message}`);
+  }
 }
 

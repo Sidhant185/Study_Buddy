@@ -112,6 +112,7 @@ const App = () => {
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState(null);
   const [refreshingQuiz, setRefreshingQuiz] = useState(null); // Track which quiz is being refreshed
+  const [profileImageError, setProfileImageError] = useState(false);
 
   const loadStudentData = useCallback(async () => {
     if (!user?.email) return;
@@ -198,6 +199,7 @@ const App = () => {
             setPendingStudent(null);
             setStudentRecord(existingStudent);
             setUser(currentUser);
+            setProfileImageError(false);
             setView("student");
           } else {
             setPendingStudent({
@@ -2097,7 +2099,7 @@ const App = () => {
         onSelect={handleNavSelect}
       />
       <main className="p-6 md:p-10 lg:pl-12">
-        <header className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-8 grid grid-cols-[auto_1fr_auto] gap-5 items-center">
+          <header className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-8 grid grid-cols-[auto_1fr_auto] gap-5 items-center">
             <button
               type="button"
               className="w-11 h-11 rounded-xl bg-slate-900 text-white flex flex-col items-center justify-center gap-1 lg:hidden"
@@ -2114,7 +2116,7 @@ const App = () => {
               <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-1">{copy?.heading || "Overview"}</h1>
               <p className="text-sm text-slate-600">{copy?.description || ""}</p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 justify-end ml-auto">
               <button
                 type="button"
                 className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2123,20 +2125,42 @@ const App = () => {
               >
                 {dataLoading ? "Refreshing..." : "Refresh"}
               </button>
-              <div className="hidden md:flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-full">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-sm font-semibold">
-                  {user?.displayName
-                    ? user.displayName
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")
-                        .toUpperCase()
-                        .slice(0, 2)
-                    : user?.email?.[0]?.toUpperCase() || "U"}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-900">{user?.displayName?.split(" ")[0] || user?.email?.split("@")[0] || "User"}</p>
-                  <small className="text-xs text-slate-500">Focus mode · On</small>
+              <div className="hidden md:flex items-center gap-4">
+                {/* Large circular profile avatar with Gmail photo */}
+                {user?.photoURL && !profileImageError ? (
+                  <img
+                    src={user.photoURL}
+                    alt="Profile"
+                    className="w-16 h-16 rounded-full object-cover flex-shrink-0 shadow-sm border-2 border-slate-200"
+                    onError={() => setProfileImageError(true)}
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-blue-500 text-white flex items-center justify-center text-xl font-bold flex-shrink-0 shadow-sm">
+                    {studentRecord?.name
+                      ? studentRecord.name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .toUpperCase()
+                          .slice(0, 1)
+                      : user?.displayName
+                      ? user.displayName
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .toUpperCase()
+                          .slice(0, 1)
+                      : user?.email?.[0]?.toUpperCase() || "U"}
+                  </div>
+                )}
+                {/* Name and email - vertically centered */}
+                <div className="flex flex-col justify-center -space-y-1">
+                  <h3 className="text-base font-bold text-slate-900 leading-tight">
+                    {studentRecord?.name || user?.displayName || "User"}
+                  </h3>
+                  <p className="text-sm font-semibold text-slate-700 leading-tight">
+                    {studentRecord?.email || user?.email || ""}
+                  </p>
                 </div>
               </div>
             </div>
