@@ -1,0 +1,46 @@
+[build]
+  # Build command
+  command = "npm run build"
+  # Directory to publish (Vite outputs to 'dist' by default)
+  publish = "dist"
+
+# Redirect rules for SPA (Single Page Application)
+# This ensures all routes are handled by index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers for security and performance
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+
+# Cache static assets
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Don't cache HTML
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Environment variables should be set in Netlify dashboard:
+# - VITE_FIREBASE_API_KEY
+# - VITE_FIREBASE_AUTH_DOMAIN
+# - VITE_FIREBASE_PROJECT_ID
+# - VITE_FIREBASE_STORAGE_BUCKET
+# - VITE_FIREBASE_MESSAGING_SENDER_ID
+# - VITE_FIREBASE_APP_ID
+# - VITE_FIREBASE_MEASUREMENT_ID
+# - VITE_GEMINI_API_KEY
+# - VITE_ALLOWED_EMAIL_DOMAIN
+
