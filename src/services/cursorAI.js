@@ -417,6 +417,474 @@ Generate 5-10 practice questions focusing on identified weak areas from this con
  * @param {number} params.count - Number of questions to generate
  * @returns {Promise<Array>} Array of practice questions
  */
+/**
+ * Generate Maths Quiz using Gemini API
+ * @param {Object} params - Quiz parameters
+ * @param {string} params.topic - Maths topic (e.g., "Algebra", "Calculus")
+ * @param {string} params.difficulty - "easy", "medium", or "hard"
+ * @param {number} params.numQuestions - Number of questions (5-20)
+ * @returns {Promise<Array>} Array of quiz questions
+ */
+export async function generateMathsQuiz({ topic, difficulty, numQuestions }) {
+  const systemPrompt = `You are an expert mathematics instructor creating educational quizzes. 
+Return ONLY valid JSON, no markdown, no explanations.`;
+
+  const difficultyGuidelines = {
+    easy: "Focus on basic definitions, simple calculations, and fundamental concepts. Use straightforward language.",
+    medium: "Focus on application of concepts, multi-step problems, and moderate complexity. Test understanding.",
+    hard: "Focus on advanced problem-solving, edge cases, optimization, and complex scenarios. Challenge critical thinking."
+  };
+
+  const userPrompt = `Generate a ${difficulty} level mathematics quiz on the topic: "${topic}".
+
+Generate exactly ${numQuestions} multiple-choice questions.
+
+For each question, follow this logic:
+1. Select a specific fact/concept from the topic
+2. Formulate a clear question stem
+3. Identify the correct answer
+4. Generate 3 plausible distractors (common mistakes, related concepts, or misconceptions)
+5. Provide a brief explanation
+
+Return ONLY this JSON format (no markdown):
+{
+  "questions": [
+    {
+      "id": 1,
+      "question": "What is the derivative of x^2?",
+      "options": {
+        "A": "x",
+        "B": "2x",
+        "C": "x^2",
+        "D": "2x^2"
+      },
+      "correctAnswer": "B",
+      "explanation": "The derivative of x^2 is 2x using the power rule."
+    }
+  ]
+}
+
+Rules:
+- Each question must have exactly 4 options (A, B, C, D)
+- Correct answer must be one of A, B, C, or D
+- Distractors must be plausible but incorrect
+- Questions should progress from basic to more complex
+- All questions must be related to: ${topic}
+- Difficulty level: ${difficultyGuidelines[difficulty]}`;
+
+  try {
+    const response = await callGeminiAPI(systemPrompt, userPrompt, {
+      temperature: 0.7, // Slightly higher for variety
+      max_tokens: 8000, // Max tokens for quiz
+    });
+
+    // Parse JSON response
+    let quizData;
+    try {
+      console.log("🤖 Quiz Raw Response (first 500 chars):", response.substring(0, 500));
+      
+      // Clean the response - remove any leading/trailing whitespace
+      let cleanedResponse = response.trim();
+      
+      // Function to find balanced JSON object by tracking braces
+      const findBalancedJSON = (str) => {
+        let start = str.indexOf('{');
+        if (start === -1) return null;
+        
+        let depth = 0;
+        let inString = false;
+        let escapeNext = false;
+        
+        for (let i = start; i < str.length; i++) {
+          const char = str[i];
+          
+          if (escapeNext) {
+            escapeNext = false;
+            continue;
+          }
+          
+          if (char === '\\') {
+            escapeNext = true;
+            continue;
+          }
+          
+          if (char === '"' && !escapeNext) {
+            inString = !inString;
+            continue;
+          }
+          
+          if (!inString) {
+            if (char === '{') {
+              depth++;
+            } else if (char === '}') {
+              depth--;
+              if (depth === 0) {
+                return str.substring(start, i + 1);
+              }
+            }
+          }
+        }
+        
+        return null;
+      };
+      
+      // Try to extract JSON from markdown code fence first
+      const jsonMatch = cleanedResponse.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        console.log("✅ Found JSON in code fence");
+        quizData = JSON.parse(jsonMatch[1]);
+      } else {
+        // Try to find balanced JSON object
+        const jsonStr = findBalancedJSON(cleanedResponse);
+        if (jsonStr) {
+          console.log("✅ Found balanced JSON object");
+          quizData = JSON.parse(jsonStr);
+        } else {
+          // Last resort: try parsing the entire response
+          console.log("⚠️ Trying to parse entire response as JSON");
+          quizData = JSON.parse(cleanedResponse);
+        }
+      }
+      
+      console.log("✅ Successfully parsed quiz:", {
+        questionCount: quizData.questions?.length
+      });
+    } catch (parseError) {
+      console.error("❌ JSON Parse Error:", parseError.message);
+      const positionMatch = parseError.message.match(/position (\d+)/);
+      if (positionMatch) {
+        const pos = parseInt(positionMatch[1]);
+        console.error("❌ Parse Error at position:", pos);
+        console.error("❌ Context around error:", response.substring(Math.max(0, pos - 50), pos + 50));
+      }
+      console.error("❌ Failed Response (first 1000 chars):", response.substring(0, 1000));
+      throw new Error(`Failed to parse quiz response: ${parseError.message}. Please try again.`);
+    }
+
+    // Validate and return
+    if (!quizData.questions || !Array.isArray(quizData.questions)) {
+      throw new Error("Invalid quiz format received from API");
+    }
+
+    if (quizData.questions.length !== numQuestions) {
+      console.warn(`⚠️ Expected ${numQuestions} questions, got ${quizData.questions.length}`);
+    }
+
+    return quizData.questions;
+  } catch (error) {
+    console.error("Maths quiz generation error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Generate Web Development Quiz using Gemini API
+ * @param {Object} params - Quiz parameters
+ * @param {string} params.topic - Web development topic (e.g., "HTML", "CSS", "JavaScript", "React")
+ * @param {string} params.difficulty - "easy", "medium", or "hard"
+ * @param {number} params.numQuestions - Number of questions (5-10)
+ * @returns {Promise<Array>} Array of quiz questions
+ */
+export async function generateWebQuiz({ topic, difficulty, numQuestions }) {
+  const systemPrompt = `You are an expert web development instructor creating educational quizzes. 
+Return ONLY valid JSON, no markdown, no explanations.`;
+
+  const difficultyGuidelines = {
+    easy: "Focus on basic definitions, simple syntax, and fundamental concepts. Use straightforward language.",
+    medium: "Focus on application of concepts, code examples, and moderate complexity. Test understanding.",
+    hard: "Focus on advanced problem-solving, edge cases, optimization, and complex scenarios. Challenge critical thinking."
+  };
+
+  const userPrompt = `Generate a ${difficulty} level web development quiz on the topic: "${topic}".
+
+Generate exactly ${numQuestions} multiple-choice questions.
+
+For each question, follow this logic:
+1. Select a specific fact/concept from the topic
+2. Formulate a clear question stem
+3. Identify the correct answer
+4. Generate 3 plausible distractors (common mistakes, related concepts, or misconceptions)
+5. Provide a brief explanation
+
+Return ONLY this JSON format (no markdown):
+{
+  "questions": [
+    {
+      "id": 1,
+      "question": "What does HTML stand for?",
+      "options": {
+        "A": "HyperText Markup Language",
+        "B": "High-level Text Markup Language",
+        "C": "Hyperlink and Text Markup Language",
+        "D": "Home Tool Markup Language"
+      },
+      "correctAnswer": "A",
+      "explanation": "HTML stands for HyperText Markup Language, which is the standard markup language for creating web pages."
+    }
+  ]
+}
+
+Rules:
+- Each question must have exactly 4 options (A, B, C, D)
+- Correct answer must be one of A, B, C, or D
+- Distractors must be plausible but incorrect
+- Questions should progress from basic to more complex
+- All questions must be related to: ${topic}
+- Difficulty level: ${difficultyGuidelines[difficulty]}`;
+
+  try {
+    const response = await callGeminiAPI(systemPrompt, userPrompt, {
+      temperature: 0.7, // Slightly higher for variety
+      max_tokens: 8000, // Max tokens for quiz
+    });
+
+    // Parse JSON response (same logic as generateMathsQuiz)
+    let quizData;
+    try {
+      console.log("🤖 Web Quiz Raw Response (first 500 chars):", response.substring(0, 500));
+      
+      let cleanedResponse = response.trim();
+      
+      const findBalancedJSON = (str) => {
+        let start = str.indexOf('{');
+        if (start === -1) return null;
+        
+        let depth = 0;
+        let inString = false;
+        let escapeNext = false;
+        
+        for (let i = start; i < str.length; i++) {
+          const char = str[i];
+          
+          if (escapeNext) {
+            escapeNext = false;
+            continue;
+          }
+          
+          if (char === '\\') {
+            escapeNext = true;
+            continue;
+          }
+          
+          if (char === '"' && !escapeNext) {
+            inString = !inString;
+            continue;
+          }
+          
+          if (!inString) {
+            if (char === '{') {
+              depth++;
+            } else if (char === '}') {
+              depth--;
+              if (depth === 0) {
+                return str.substring(start, i + 1);
+              }
+            }
+          }
+        }
+        
+        return null;
+      };
+      
+      const jsonMatch = cleanedResponse.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        console.log("✅ Found JSON in code fence");
+        quizData = JSON.parse(jsonMatch[1]);
+      } else {
+        const jsonStr = findBalancedJSON(cleanedResponse);
+        if (jsonStr) {
+          console.log("✅ Found balanced JSON object");
+          quizData = JSON.parse(jsonStr);
+        } else {
+          console.log("⚠️ Trying to parse entire response as JSON");
+          quizData = JSON.parse(cleanedResponse);
+        }
+      }
+      
+      console.log("✅ Successfully parsed web quiz:", {
+        questionCount: quizData.questions?.length
+      });
+    } catch (parseError) {
+      console.error("❌ JSON Parse Error:", parseError.message);
+      const positionMatch = parseError.message.match(/position (\d+)/);
+      if (positionMatch) {
+        const pos = parseInt(positionMatch[1]);
+        console.error("❌ Parse Error at position:", pos);
+        console.error("❌ Context around error:", response.substring(Math.max(0, pos - 50), pos + 50));
+      }
+      console.error("❌ Failed Response (first 1000 chars):", response.substring(0, 1000));
+      throw new Error(`Failed to parse quiz response: ${parseError.message}. Please try again.`);
+    }
+
+    if (!quizData.questions || !Array.isArray(quizData.questions)) {
+      throw new Error("Invalid quiz format received from API");
+    }
+
+    if (quizData.questions.length !== numQuestions) {
+      console.warn(`⚠️ Expected ${numQuestions} questions, got ${quizData.questions.length}`);
+    }
+
+    return quizData.questions;
+  } catch (error) {
+    console.error("Web quiz generation error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Generate Java Programming Quiz using Gemini API
+ * @param {Object} params - Quiz parameters
+ * @param {string} params.topic - Java topic (e.g., "OOP", "Collections", "Multithreading", "Streams")
+ * @param {string} params.difficulty - "easy", "medium", or "hard"
+ * @param {number} params.numQuestions - Number of questions (5-10)
+ * @returns {Promise<Array>} Array of quiz questions
+ */
+export async function generateJavaQuiz({ topic, difficulty, numQuestions }) {
+  const systemPrompt = `You are an expert Java programming instructor creating educational quizzes. 
+Return ONLY valid JSON, no markdown, no explanations.`;
+
+  const difficultyGuidelines = {
+    easy: "Focus on basic syntax, fundamental concepts, and simple code examples. Use straightforward language.",
+    medium: "Focus on application of concepts, code analysis, and moderate complexity. Test understanding of Java features.",
+    hard: "Focus on advanced concepts, design patterns, optimization, and complex scenarios. Challenge critical thinking."
+  };
+
+  const userPrompt = `Generate a ${difficulty} level Java programming quiz on the topic: "${topic}".
+
+Generate exactly ${numQuestions} multiple-choice questions.
+
+For each question, follow this logic:
+1. Select a specific fact/concept from the topic
+2. Formulate a clear question stem (can include code snippets)
+3. Identify the correct answer
+4. Generate 3 plausible distractors (common mistakes, related concepts, or misconceptions)
+5. Provide a brief explanation
+
+Return ONLY this JSON format (no markdown):
+{
+  "questions": [
+    {
+      "id": 1,
+      "question": "What is the default access modifier for class members in Java?",
+      "options": {
+        "A": "public",
+        "B": "private",
+        "C": "protected",
+        "D": "package-private (default)"
+      },
+      "correctAnswer": "D",
+      "explanation": "In Java, if no access modifier is specified, the member has package-private (default) access, meaning it's accessible only within the same package."
+    }
+  ]
+}
+
+Rules:
+- Each question must have exactly 4 options (A, B, C, D)
+- Correct answer must be one of A, B, C, or D
+- Distractors must be plausible but incorrect
+- Questions should progress from basic to more complex
+- All questions must be related to: ${topic}
+- Difficulty level: ${difficultyGuidelines[difficulty]}`;
+
+  try {
+    const response = await callGeminiAPI(systemPrompt, userPrompt, {
+      temperature: 0.7,
+      max_tokens: 8000,
+    });
+
+    // Parse JSON response (same logic as other quiz functions)
+    let quizData;
+    try {
+      console.log("🤖 Java Quiz Raw Response (first 500 chars):", response.substring(0, 500));
+      
+      let cleanedResponse = response.trim();
+      
+      const findBalancedJSON = (str) => {
+        let start = str.indexOf('{');
+        if (start === -1) return null;
+        
+        let depth = 0;
+        let inString = false;
+        let escapeNext = false;
+        
+        for (let i = start; i < str.length; i++) {
+          const char = str[i];
+          
+          if (escapeNext) {
+            escapeNext = false;
+            continue;
+          }
+          
+          if (char === '\\') {
+            escapeNext = true;
+            continue;
+          }
+          
+          if (char === '"' && !escapeNext) {
+            inString = !inString;
+            continue;
+          }
+          
+          if (!inString) {
+            if (char === '{') {
+              depth++;
+            } else if (char === '}') {
+              depth--;
+              if (depth === 0) {
+                return str.substring(start, i + 1);
+              }
+            }
+          }
+        }
+        
+        return null;
+      };
+      
+      const jsonMatch = cleanedResponse.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        console.log("✅ Found JSON in code fence");
+        quizData = JSON.parse(jsonMatch[1]);
+      } else {
+        const jsonStr = findBalancedJSON(cleanedResponse);
+        if (jsonStr) {
+          console.log("✅ Found balanced JSON object");
+          quizData = JSON.parse(jsonStr);
+        } else {
+          console.log("⚠️ Trying to parse entire response as JSON");
+          quizData = JSON.parse(cleanedResponse);
+        }
+      }
+      
+      console.log("✅ Successfully parsed Java quiz:", {
+        questionCount: quizData.questions?.length
+      });
+    } catch (parseError) {
+      console.error("❌ JSON Parse Error:", parseError.message);
+      const positionMatch = parseError.message.match(/position (\d+)/);
+      if (positionMatch) {
+        const pos = parseInt(positionMatch[1]);
+        console.error("❌ Parse Error at position:", pos);
+        console.error("❌ Context around error:", response.substring(Math.max(0, pos - 50), pos + 50));
+      }
+      console.error("❌ Failed Response (first 1000 chars):", response.substring(0, 1000));
+      throw new Error(`Failed to parse quiz response: ${parseError.message}. Please try again.`);
+    }
+
+    if (!quizData.questions || !Array.isArray(quizData.questions)) {
+      throw new Error("Invalid quiz format received from API");
+    }
+
+    if (quizData.questions.length !== numQuestions) {
+      console.warn(`⚠️ Expected ${numQuestions} questions, got ${quizData.questions.length}`);
+    }
+
+    return quizData.questions;
+  } catch (error) {
+    console.error("Java quiz generation error:", error);
+    throw error;
+  }
+}
+
 export async function generateHistoricalPracticeQuestions({
   studentAnalytics,
   pastEvaluations = [],
@@ -573,6 +1041,178 @@ Provide a detailed report in JSON format:
     return report;
   } catch (error) {
     console.error("Report generation error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Generate Java Coding Practice Questions using Gemini API
+ * @param {Object} params - Question parameters
+ * @param {string} params.topics - Comma-separated topics (e.g., "Arrays, Strings, OOP")
+ * @param {string} params.difficulty - "easy", "medium", or "hard"
+ * @returns {Promise<Array>} Array of 5 coding questions
+ */
+export async function generateJavaCodingQuestions({ topics, difficulty }) {
+  const systemPrompt = `You are an expert Java programming instructor creating coding practice questions. 
+Return ONLY valid JSON, no markdown, no explanations.`;
+
+  const difficultyGuidelines = {
+    easy: "🟢 EASY: Straightforward logic, basic arrays/strings, one-loop solutions, very few edge cases. Examples: reverse array, sum of numbers, check palindrome.",
+    medium: "🟡 MEDIUM: Requires some thinking, uses common patterns (two pointers, sliding window, hashing, BFS/DFS), multiple edge cases. Examples: longest substring, binary search problems, BFS grid problems.",
+    hard: "🔴 HARD: Multiple algorithms combined, advanced DP, graphs, trees, backtracking, many edge cases. Examples: N-Queens, DP on trees, Dijkstra variants, segment trees."
+  };
+
+  const userPrompt = `Generate exactly 5 Java coding practice questions on the topics: "${topics}".
+
+Difficulty level: ${difficulty}
+${difficultyGuidelines[difficulty]}
+
+For each question, provide:
+1. A clear problem description
+2. A code template with method signature
+3. Exactly 3 test cases with input and expected output
+4. Difficulty classification (easy, medium, or hard)
+
+IMPORTANT: For test case inputs:
+- If the input contains an array, format it as:
+  - First line: array length (e.g., "3")
+  - Second line: array values separated by spaces (e.g., "1 2 3")
+  - Example: "3\n1 2 3" for an array of length 3 with values [1, 2, 3]
+- For single values, just provide the value (e.g., "5")
+- For empty arrays, use "0\n" (length 0, no values)
+- Use newline character (\n) to separate length and values
+
+Return ONLY this JSON format (no markdown):
+{
+  "questions": [
+    {
+      "id": 1,
+      "title": "Question title",
+      "description": "Detailed problem description with examples",
+      "codeTemplate": "public class Solution {\n    public int methodName(int[] arr) {\n        // Your code here\n        return 0;\n    }\n}",
+      "testCases": [
+        {
+          "input": "3\n1 2 3",
+          "expectedOutput": "6"
+        },
+        {
+          "input": "0\n",
+          "expectedOutput": "0"
+        },
+        {
+          "input": "1\n5",
+          "expectedOutput": "5"
+        }
+      ],
+      "difficulty": "easy"
+    }
+  ]
+}
+
+Rules:
+- Generate exactly 5 questions
+- Each question must have exactly 3 test cases
+- Test cases should cover edge cases
+- Code template should include proper method signature
+- All questions must relate to: ${topics}
+- Difficulty must match: ${difficulty}
+- Questions should progress from simpler to more complex`;
+
+  try {
+    const response = await callGeminiAPI(systemPrompt, userPrompt, {
+      temperature: 0.7,
+      max_tokens: 8000,
+    });
+
+    // Parse JSON response
+    let questionData;
+    try {
+      console.log("🤖 Java Coding Questions Raw Response (first 500 chars):", response.substring(0, 500));
+      
+      let cleanedResponse = response.trim();
+      
+      const findBalancedJSON = (str) => {
+        let start = str.indexOf('{');
+        if (start === -1) return null;
+        
+        let depth = 0;
+        let inString = false;
+        let escapeNext = false;
+        
+        for (let i = start; i < str.length; i++) {
+          const char = str[i];
+          
+          if (escapeNext) {
+            escapeNext = false;
+            continue;
+          }
+          
+          if (char === '\\') {
+            escapeNext = true;
+            continue;
+          }
+          
+          if (char === '"' && !escapeNext) {
+            inString = !inString;
+            continue;
+          }
+          
+          if (!inString) {
+            if (char === '{') {
+              depth++;
+            } else if (char === '}') {
+              depth--;
+              if (depth === 0) {
+                return str.substring(start, i + 1);
+              }
+            }
+          }
+        }
+        
+        return null;
+      };
+      
+      const jsonMatch = cleanedResponse.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        console.log("✅ Found JSON in code fence");
+        questionData = JSON.parse(jsonMatch[1]);
+      } else {
+        const jsonStr = findBalancedJSON(cleanedResponse);
+        if (jsonStr) {
+          console.log("✅ Found balanced JSON object");
+          questionData = JSON.parse(jsonStr);
+        } else {
+          console.log("⚠️ Trying to parse entire response as JSON");
+          questionData = JSON.parse(cleanedResponse);
+        }
+      }
+      
+      console.log("✅ Successfully parsed Java coding questions:", {
+        questionCount: questionData.questions?.length
+      });
+    } catch (parseError) {
+      console.error("❌ JSON Parse Error:", parseError.message);
+      const positionMatch = parseError.message.match(/position (\d+)/);
+      if (positionMatch) {
+        const pos = parseInt(positionMatch[1]);
+        console.error("❌ Parse Error at position:", pos);
+        console.error("❌ Context around error:", response.substring(Math.max(0, pos - 50), pos + 50));
+      }
+      console.error("❌ Failed Response (first 1000 chars):", response.substring(0, 1000));
+      throw new Error(`Failed to parse questions response: ${parseError.message}. Please try again.`);
+    }
+
+    if (!questionData.questions || !Array.isArray(questionData.questions)) {
+      throw new Error("Invalid questions format received from API");
+    }
+
+    if (questionData.questions.length !== 5) {
+      console.warn(`⚠️ Expected 5 questions, got ${questionData.questions.length}`);
+    }
+
+    return questionData.questions;
+  } catch (error) {
+    console.error("Java coding questions generation error:", error);
     throw error;
   }
 }

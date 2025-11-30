@@ -15,7 +15,8 @@ import {
   createPracticeTask,
   parseTestCases,
 } from "../services/firestore.js";
-import { evaluateCodeSubmission } from "../services/cursorAI.js";
+import { evaluateCodeSubmission, generateJavaCodingQuestions } from "../services/cursorAI.js";
+import { getCachedJavaPractice, setCachedJavaPractice } from "../services/cache.js";
 
 const JavaEditor = ({ user, studentRecord }) => {
   const [contests, setContests] = useState([]);
@@ -32,28 +33,51 @@ const JavaEditor = ({ user, studentRecord }) => {
   const [evaluation, setEvaluation] = useState(null);
   const [practiceTasks, setPracticeTasks] = useState([]);
   const [error, setError] = useState(null);
+  
+  // Custom Practice Mode State
+  const [customPracticeModal, setCustomPracticeModal] = useState(false);
+  const [customPracticeForm, setCustomPracticeForm] = useState({
+    topics: "",
+    difficulty: "medium",
+  });
+  const [generatingQuestions, setGeneratingQuestions] = useState(false);
+  const [customQuestions, setCustomQuestions] = useState([]);
+  const [isCustomPractice, setIsCustomPractice] = useState(false);
+  const [currentTestCaseIndex, setCurrentTestCaseIndex] = useState(0);
+  const [customPracticeEvaluation, setCustomPracticeEvaluation] = useState(null);
+  const [evaluatingCustomPractice, setEvaluatingCustomPractice] = useState(false);
+  const [refreshingCustomPractice, setRefreshingCustomPractice] = useState(false);
 
   useEffect(() => {
     loadContests();
   }, []);
 
   useEffect(() => {
-    if (selectedContest && studentRecord) {
+    if (selectedContest && studentRecord && !isCustomPractice) {
       loadQuestions();
     }
-  }, [selectedContest, studentRecord]);
+  }, [selectedContest, studentRecord, isCustomPractice]);
 
   useEffect(() => {
     if (selectedQuestion) {
       // Load starter template or previous submission
-      setCode(selectedQuestion.codeTemplate || "public class Solution {\n    // Your code here\n}");
+      let template = selectedQuestion.codeTemplate || "public class Solution {\n    // Your code here\n}";
+      
+      // For custom practice questions, ensure we have a proper template
+      if (isCustomPractice && selectedQuestion.codeTemplate) {
+        template = selectedQuestion.codeTemplate;
+      }
+      
+      setCode(template);
       setOutput("");
       setTestResults(null);
       setEvaluation(null);
-      loadEvaluation();
-      loadPracticeTasks();
+      if (!isCustomPractice) {
+        loadEvaluation();
+        loadPracticeTasks();
+      }
     }
-  }, [selectedQuestion]);
+  }, [selectedQuestion, isCustomPractice]);
 
   const loadContests = async () => {
     try {
@@ -203,9 +227,131 @@ const JavaEditor = ({ user, studentRecord }) => {
     }
   };
 
+  const handleGenerateCustomQuestions = async (forceRefresh = false) => {
+    if (!customPracticeForm.topics.trim()) {
+      setError("Please enter at least one topic");
+      return;
+    }
+
+    const params = {
+      topics: customPracticeForm.topics.trim(),
+      difficulty: customPracticeForm.difficulty,
+    };
+
+    // Check cache first if not forcing refresh
+    if (!forceRefresh) {
+      const cached = getCachedJavaPractice(params);
+      if (cached && cached.questions) {
+        const formattedQuestions = cached.questions.map((q, idx) => ({
+          ...q,
+          id: q.id || `custom-${idx}`,
+          questionNumber: q.questionNumber || (idx + 1),
+          testCases: q.testCases || [],
+        }));
+        setCustomQuestions(formattedQuestions);
+        setCustomPracticeModal(false);
+        setCurrentTestCaseIndex(0);
+        if (formattedQuestions.length > 0) {
+          setSelectedQuestion(formattedQuestions[0]);
+        }
+        return;
+      }
+    }
+
+    setGeneratingQuestions(true);
+    setError(null);
+    try {
+      const generatedQuestions = await generateJavaCodingQuestions(params);
+      
+      // Format questions to match expected structure
+      const formattedQuestions = generatedQuestions.map((q, idx) => ({
+        ...q,
+        id: q.id || `custom-${idx}`,
+        questionNumber: q.questionNumber || (idx + 1),
+        testCases: q.testCases || [],
+      }));
+      
+      // Cache the generated questions
+      setCachedJavaPractice(params, generatedQuestions);
+      
+      setCustomQuestions(formattedQuestions);
+      setCustomPracticeModal(false);
+      setCurrentTestCaseIndex(0);
+      if (formattedQuestions.length > 0) {
+        setSelectedQuestion(formattedQuestions[0]);
+      }
+    } catch (err) {
+      console.error("Failed to generate custom questions", err);
+      setError(`Failed to generate questions: ${err.message}`);
+    } finally {
+      setGeneratingQuestions(false);
+      setRefreshingCustomPractice(false);
+    }
+  };
+
+  const handleRefreshCustomPractice = async () => {
+    if (!customPracticeForm.topics.trim()) {
+      setError("Please enter at least one topic first");
+      return;
+    }
+    setRefreshingCustomPractice(true);
+    await handleGenerateCustomQuestions(true);
+  };
+
+  const handleEvaluateCustomPractice = async () => {
+    if (!code.trim() || !selectedQuestion) {
+      setError("Please write code and select a question first.");
+      return;
+    }
+
+    setEvaluatingCustomPractice(true);
+    setError(null);
+    setCustomPracticeEvaluation(null);
+
+    try {
+      // Get all test cases
+      const testCases = selectedQuestion.testCases || [];
+      
+      // Run all test cases
+      const results = await runTestCases(code, testCases);
+      
+      // Evaluate with AI
+      const evaluation = await evaluateCodeSubmission({
+        studentCode: code.trim(),
+        expectedSolution: "",
+        questionDescription: selectedQuestion.description || selectedQuestion.title,
+        testCases: testCases.map(tc => ({
+          input: tc.input,
+          expectedOutput: tc.expectedOutput,
+        })),
+        studentHistory: null,
+      });
+
+      setCustomPracticeEvaluation({
+        ...evaluation,
+        testResults: results,
+      });
+    } catch (err) {
+      console.error("Custom practice evaluation failed", err);
+      setError(`Evaluation failed: ${err.message}`);
+    } finally {
+      setEvaluatingCustomPractice(false);
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!code.trim() || !selectedQuestion || !studentRecord || !selectedContest) {
+    if (!code.trim() || !selectedQuestion || !studentRecord) {
       setError("Please complete all fields before submitting.");
+      return;
+    }
+    
+    if (isCustomPractice) {
+      setError("Custom practice questions cannot be submitted. Use regular contests for submission.");
+      return;
+    }
+    
+    if (!selectedContest) {
+      setError("Please select a contest.");
       return;
     }
 
@@ -366,10 +512,27 @@ const JavaEditor = ({ user, studentRecord }) => {
   }
 
   return (
+    <>
     <div className="java-editor">
       <div className="java-editor__header">
-        <h2>Java Contest Coding Environment</h2>
-        <p>Write, test, and submit your Java solutions</p>
+        <div>
+          <h2>Java Contest Coding Environment</h2>
+          <p>Write, test, and submit your Java solutions</p>
+        </div>
+        {isCustomPractice && (
+          <button
+            onClick={handleRefreshCustomPractice}
+            disabled={refreshingCustomPractice || !customPracticeForm.topics.trim()}
+            className="java-editor__header-refresh-btn"
+            title="Refresh custom practice questions"
+          >
+            {refreshingCustomPractice ? (
+              <span className="animate-spin">⏳</span>
+            ) : (
+              <span>🔄</span>
+            )}
+          </button>
+        )}
       </div>
 
       <div className="java-editor__layout">
@@ -377,106 +540,147 @@ const JavaEditor = ({ user, studentRecord }) => {
           <div className="java-editor__section">
             <h3>Contests</h3>
             <select
-              value={selectedContest?.id || ""}
+              value={isCustomPractice ? "custom" : (selectedContest?.id || "")}
               onChange={(e) => {
-                const contest = contests.find((c) => c.id === e.target.value);
-                setSelectedContest(contest);
-                setSelectedQuestion(null);
+                if (e.target.value === "custom") {
+                  setIsCustomPractice(true);
+                  setSelectedContest(null);
+                  setSelectedQuestion(null);
+                  setQuestions([]);
+                  
+                  // Check cache for existing custom practice
+                  const cached = getCachedJavaPractice({
+                    topics: customPracticeForm.topics.trim() || "",
+                    difficulty: customPracticeForm.difficulty,
+                  });
+                  
+                  if (cached && cached.questions && customPracticeForm.topics.trim()) {
+                    const formattedQuestions = cached.questions.map((q, idx) => ({
+                      ...q,
+                      id: q.id || `custom-${idx}`,
+                      questionNumber: q.questionNumber || (idx + 1),
+                      testCases: q.testCases || [],
+                    }));
+                    setCustomQuestions(formattedQuestions);
+                    if (formattedQuestions.length > 0) {
+                      setSelectedQuestion(formattedQuestions[0]);
+                    }
+                  } else {
+                    setCustomQuestions([]);
+                    setCustomPracticeModal(true);
+                  }
+                } else {
+                  setIsCustomPractice(false);
+                  const contest = contests.find((c) => c.id === e.target.value);
+                  setSelectedContest(contest);
+                  setSelectedQuestion(null);
+                  setCustomQuestions([]);
+                }
               }}
               className="java-editor__select"
             >
+              <option value="">Select a contest</option>
               {contests.map((contest) => (
                 <option key={contest.id} value={contest.id}>
                   {contest.title}
                 </option>
               ))}
+              <option value="custom">Custom Practice</option>
             </select>
           </div>
 
-          {selectedContest && (
+          {(selectedContest || isCustomPractice) && (
             <div className="java-editor__section">
               <h3>Questions</h3>
               <div className="java-editor__questions">
-                {questions.map((q) => (
+                {(isCustomPractice ? customQuestions : questions).map((q, idx) => (
                   <button
-                    key={q.id}
+                    key={q.id || idx}
                     type="button"
                     className={`java-editor__question-btn ${
                       selectedQuestion?.id === q.id ? "active" : ""
                     }`}
                     onClick={() => setSelectedQuestion(q)}
                   >
-                    Q{q.questionNumber}: {q.title}
+                    Q{q.questionNumber || (idx + 1)}: {q.title}
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {evaluation && (
-            <div className="java-editor__section">
-              <h3>AI Evaluation</h3>
-              <div className="java-editor__evaluation">
-                <div className="java-editor__score">
-                  Score: {evaluation.overallScore}/100
-                </div>
-                <div>
-                  <strong>Strengths:</strong>
-                  <ul>
-                    {evaluation.strengths?.map((s, i) => (
-                      <li key={i}>{s}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <strong>Weaknesses:</strong>
-                  <ul>
-                    {evaluation.weaknesses?.map((w, i) => (
-                      <li key={i}>{w}</li>
-                    ))}
-                  </ul>
-                </div>
-                {evaluation.detailedAnalysis && (
-                  <div>
-                    <strong>Analysis:</strong>
-                    <p>{evaluation.detailedAnalysis}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {practiceTasks.length > 0 && (
-            <div className="java-editor__section">
-              <h3>Practice Questions</h3>
-              <div className="java-editor__practice">
-                {practiceTasks.slice(0, 5).map((task) => (
-                  <div key={task.id} className="java-editor__practice-item">
-                    <strong>{task.title}</strong>
-                    <p>{task.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="java-editor__main">
           {selectedQuestion ? (
             <>
               <div className="java-editor__question">
-                <h3>Q{selectedQuestion.questionNumber}: {selectedQuestion.title}</h3>
+                <div className="java-editor__question-header">
+                  <h3>Q{selectedQuestion.questionNumber || 1}: {selectedQuestion.title}</h3>
+                  {selectedQuestion.difficulty && (
+                    <span className={`java-editor__difficulty java-editor__difficulty--${selectedQuestion.difficulty}`}>
+                      {selectedQuestion.difficulty === "easy" ? "🟢 Easy" : 
+                       selectedQuestion.difficulty === "medium" ? "🟡 Medium" : 
+                       "🔴 Hard"}
+                    </span>
+                  )}
+                </div>
                 <p>{selectedQuestion.description}</p>
                 {selectedQuestion.testCases?.length > 0 && (
                   <div className="java-editor__test-cases">
-                    <strong>Test Cases:</strong>
-                    <ul>
-                      {selectedQuestion.testCases.map((tc, i) => (
-                        <li key={i}>
-                          Input: <code>{tc.input}</code> → Expected: <code>{tc.expectedOutput}</code>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="java-editor__test-cases-header">
+                      <strong>Test Case {isCustomPractice ? currentTestCaseIndex + 1 : 'All'}:</strong>
+                      {isCustomPractice && selectedQuestion.testCases.length > 1 && (
+                        <div className="java-editor__test-case-nav">
+                          <button
+                            type="button"
+                            onClick={() => setCurrentTestCaseIndex(prev => Math.max(0, prev - 1))}
+                            disabled={currentTestCaseIndex === 0}
+                            className="java-editor__test-case-nav-btn"
+                          >
+                            ← Previous
+                          </button>
+                          <span className="java-editor__test-case-counter">
+                            {currentTestCaseIndex + 1} / {selectedQuestion.testCases.length}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCurrentTestCaseIndex(prev => Math.min(selectedQuestion.testCases.length - 1, prev + 1))}
+                            disabled={currentTestCaseIndex === selectedQuestion.testCases.length - 1}
+                            className="java-editor__test-case-nav-btn"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {isCustomPractice ? (
+                      <div className="java-editor__test-case-single">
+                        <div className="java-editor__test-case-item">
+                          <span className="java-editor__test-case-label">Test {currentTestCaseIndex + 1}:</span>
+                          <div className="java-editor__test-case-content">
+                            <div className="java-editor__test-case-input">
+                              <strong>Input:</strong>
+                              <pre className="java-editor__test-case-pre"><code>{selectedQuestion.testCases[currentTestCaseIndex].input}</code></pre>
+                            </div>
+                            <div className="java-editor__test-case-output">
+                              <strong>Expected Output:</strong>
+                              <pre className="java-editor__test-case-pre"><code>{selectedQuestion.testCases[currentTestCaseIndex].expectedOutput}</code></pre>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <ul>
+                        {selectedQuestion.testCases.map((tc, i) => (
+                          <li key={i}>
+                            <span className="java-editor__test-case-label">Test {i + 1}:</span>
+                            <span className="java-editor__test-case-input">Input: <code>{tc.input}</code></span>
+                            <span className="java-editor__test-case-output">→ Expected: <code>{tc.expectedOutput}</code></span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
               </div>
@@ -508,14 +712,26 @@ const JavaEditor = ({ user, studentRecord }) => {
                 >
                   {loading ? "Testing..." : "Run Tests"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowSubmitDialog(true)}
-                  disabled={submitting}
-                  className="java-editor__btn java-editor__btn--submit"
-                >
-                  Submit Final Solution
-                </button>
+                {!isCustomPractice && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSubmitDialog(true)}
+                    disabled={submitting}
+                    className="java-editor__btn java-editor__btn--submit"
+                  >
+                    Submit Final Solution
+                  </button>
+                )}
+                {isCustomPractice && (
+                  <button
+                    type="button"
+                    onClick={handleEvaluateCustomPractice}
+                    disabled={evaluatingCustomPractice || loading}
+                    className="java-editor__btn java-editor__btn--evaluate"
+                  >
+                    {evaluatingCustomPractice ? "Evaluating..." : "AI Evaluate"}
+                  </button>
+                )}
               </div>
 
               {output && (
@@ -606,7 +822,167 @@ const JavaEditor = ({ user, studentRecord }) => {
           </div>
         </div>
       )}
+
+      {/* Custom Practice Modal */}
+      {customPracticeModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="quiz-modal-container">
+            <div className="quiz-modal-header">
+              <h3 className="quiz-modal-title">Generate Custom Practice Questions</h3>
+              <button
+                onClick={() => setCustomPracticeModal(false)}
+                className="quiz-modal-close"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="quiz-modal-content">
+              <div className="quiz-form-group">
+                <label className="quiz-form-label">
+                  Topics <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={customPracticeForm.topics}
+                  onChange={(e) => setCustomPracticeForm(prev => ({ ...prev, topics: e.target.value }))}
+                  placeholder="e.g., Arrays, Strings, OOP, Collections, Recursion (comma-separated)"
+                  className="quiz-form-textarea"
+                  rows="3"
+                />
+                <p className="text-xs text-slate-500 mt-1">Enter 1 or more topics separated by commas</p>
+              </div>
+
+              <div className="quiz-form-group">
+                <label className="quiz-form-label">
+                  Difficulty
+                </label>
+                <select
+                  value={customPracticeForm.difficulty}
+                  onChange={(e) => setCustomPracticeForm(prev => ({ ...prev, difficulty: e.target.value }))}
+                  className="quiz-form-select"
+                >
+                  <option value="easy">🟢 Easy</option>
+                  <option value="medium">🟡 Medium</option>
+                  <option value="hard">🔴 Hard</option>
+                </select>
+              </div>
+
+              <div className="quiz-form-group">
+                <p className="text-sm text-slate-600">
+                  <strong>Number of Questions:</strong> Fixed at 5
+                </p>
+              </div>
+
+              <button
+                onClick={handleGenerateCustomQuestions}
+                disabled={generatingQuestions || !customPracticeForm.topics.trim()}
+                className="quiz-form-submit"
+              >
+                {generatingQuestions ? (
+                  <>
+                    <span className="animate-spin">⏳</span>
+                    Generating Questions...
+                  </>
+                ) : (
+                  "Generate Questions"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+
+    {evaluation && (
+      <div className="java-ai-evaluation">
+        <div className="java-ai-evaluation__header">
+          <h3>AI Evaluation</h3>
+        </div>
+        <div className="java-ai-evaluation__content">
+          <div className="java-ai-evaluation__score">
+            <span className="java-ai-evaluation__score-label">Score</span>
+            <span className="java-ai-evaluation__score-value">{evaluation.overallScore}/100</span>
+          </div>
+          
+          <div className="java-ai-evaluation__section">
+            <strong className="java-ai-evaluation__section-title">Strengths</strong>
+            <ul className="java-ai-evaluation__list">
+              {evaluation.strengths?.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ul>
+          </div>
+          
+          <div className="java-ai-evaluation__section">
+            <strong className="java-ai-evaluation__section-title">Weaknesses</strong>
+            <ul className="java-ai-evaluation__list">
+              {evaluation.weaknesses?.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {customPracticeEvaluation && (
+      <div className="java-ai-evaluation">
+        <div className="java-ai-evaluation__header">
+          <h3>AI Evaluation (Custom Practice)</h3>
+        </div>
+        <div className="java-ai-evaluation__content">
+          {customPracticeEvaluation.testResults && (
+            <div className="java-ai-evaluation__section">
+              <strong className="java-ai-evaluation__section-title">Test Results</strong>
+              <p className="java-ai-evaluation__test-summary">
+                Passed: {customPracticeEvaluation.testResults.passed} / {customPracticeEvaluation.testResults.total}
+              </p>
+            </div>
+          )}
+          
+          <div className="java-ai-evaluation__score">
+            <span className="java-ai-evaluation__score-label">Score</span>
+            <span className="java-ai-evaluation__score-value">{customPracticeEvaluation.overallScore}/100</span>
+          </div>
+          
+          <div className="java-ai-evaluation__section">
+            <strong className="java-ai-evaluation__section-title">Strengths</strong>
+            <ul className="java-ai-evaluation__list">
+              {customPracticeEvaluation.strengths?.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ul>
+          </div>
+          
+          <div className="java-ai-evaluation__section">
+            <strong className="java-ai-evaluation__section-title">Weaknesses</strong>
+            <ul className="java-ai-evaluation__list">
+              {customPracticeEvaluation.weaknesses?.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {practiceTasks.length > 0 && (
+      <div className="java-practice-questions">
+        <div className="java-practice-questions__header">
+          <h3>Practice Questions</h3>
+        </div>
+        <div className="java-practice-questions__content">
+          {practiceTasks.slice(0, 5).map((task) => (
+            <div key={task.id} className="java-practice-questions__item">
+              <strong>{task.title}</strong>
+              <p>{task.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+  </>
   );
 };
 

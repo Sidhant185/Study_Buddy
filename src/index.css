@@ -903,10 +903,18 @@ article.bg-slate-50:hover {
   padding: 1.5rem;
   margin-bottom: 1.5rem;
   transition: box-shadow 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
 .java-editor__header:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.java-editor__header > div {
+  flex: 1;
 }
 
 .java-editor__header h2 {
@@ -918,6 +926,34 @@ article.bg-slate-50:hover {
 
 .java-editor__header p {
   color: #475569;
+}
+
+.java-editor__header-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 1.125rem;
+  flex-shrink: 0;
+}
+
+.java-editor__header-refresh-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+  transform: rotate(90deg);
+}
+
+.java-editor__header-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .java-editor__layout {
@@ -942,21 +978,32 @@ article.bg-slate-50:hover {
   background: white;
   border-radius: 0.75rem;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-  padding: 1rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
   transition: all 0.2s ease;
+  overflow: hidden;
 }
 
-.java-editor__section:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
+@media (min-width: 768px) {
+  .java-editor__section {
+    padding: 2rem;
+  }
 }
+
+@media (min-width: 1280px) {
+  .java-editor__section {
+    padding: 2.5rem;
+  }
+}
+
+/* Removed hover effect for cleaner look */
 
 .java-editor__section h3 {
   font-size: 0.875rem;
   font-weight: 600;
   color: #0f172a;
   margin-bottom: 0.75rem;
+  overflow: hidden;
 }
 
 .java-editor__select {
@@ -1010,6 +1057,9 @@ input:hover, textarea:hover, select:hover {
   color: #334155;
   border: 1px solid transparent;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .java-editor__question-btn:hover {
@@ -1032,6 +1082,14 @@ input:hover, textarea:hover, select:hover {
   flex-direction: column;
   gap: 0.75rem;
   font-size: 0.875rem;
+  overflow: hidden;
+}
+
+@media (min-width: 1280px) {
+  .java-editor__evaluation {
+    gap: 1rem;
+    font-size: 0.9375rem;
+  }
 }
 
 .java-editor__score {
@@ -1042,6 +1100,18 @@ input:hover, textarea:hover, select:hover {
   font-weight: 600;
   box-shadow: 0 2px 4px rgba(5, 150, 105, 0.15);
   border: 1px solid #86efac;
+  overflow: hidden;
+}
+
+@media (min-width: 1280px) {
+  .java-editor__score {
+    padding: 1rem 1.5rem;
+    font-size: 1.125rem;
+  }
+}
+
+.java-editor__evaluation p {
+  overflow: hidden;
 }
 
 .java-editor__evaluation strong {
@@ -1053,12 +1123,36 @@ input:hover, textarea:hover, select:hover {
   padding-left: 1.5rem;
   color: #475569;
   list-style-type: disc;
+  overflow: hidden;
+}
+
+.java-editor__evaluation li {
+  overflow: hidden;
 }
 
 .java-editor__practice {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 0.75rem;
+}
+
+@media (min-width: 1024px) {
+  .java-editor__practice {
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .java-editor__practice {
+    gap: 2rem;
+  }
+}
+
+@media (min-width: 1536px) {
+  .java-editor__practice {
+    gap: 2.5rem;
+  }
 }
 
 .java-editor__practice-item {
@@ -1068,6 +1162,29 @@ input:hover, textarea:hover, select:hover {
   border: 1px solid #e2e8f0;
   transition: all 0.2s ease;
   cursor: pointer;
+  overflow: hidden;
+  min-height: 120px;
+}
+
+@media (min-width: 1024px) {
+  .java-editor__practice-item {
+    padding: 1.25rem;
+    min-height: 140px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .java-editor__practice-item {
+    padding: 1.5rem;
+    min-height: 160px;
+  }
+}
+
+@media (min-width: 1536px) {
+  .java-editor__practice-item {
+    padding: 2rem;
+    min-height: 180px;
+  }
 }
 
 .java-editor__practice-item:hover {
@@ -1082,11 +1199,29 @@ input:hover, textarea:hover, select:hover {
   color: #0f172a;
   display: block;
   margin-bottom: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 1280px) {
+  .java-editor__practice-item strong {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+  }
 }
 
 .java-editor__practice-item p {
   font-size: 0.75rem;
   color: #475569;
+  overflow: hidden;
+}
+
+@media (min-width: 1280px) {
+  .java-editor__practice-item p {
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
 }
 
 .java-editor__main {
@@ -1108,11 +1243,51 @@ input:hover, textarea:hover, select:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
+.java-editor__question-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .java-editor__question h3 {
   font-size: 1.25rem;
   font-weight: 600;
   color: #0f172a;
-  margin-bottom: 0.5rem;
+  margin: 0;
+  flex: 1;
+}
+
+.java-editor__difficulty {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+
+.java-editor__difficulty--easy {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.java-editor__difficulty--medium {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde047;
+}
+
+.java-editor__difficulty--hard {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
 }
 
 .java-editor__question p {
@@ -1127,19 +1302,152 @@ input:hover, textarea:hover, select:hover {
   border-radius: 0.5rem;
 }
 
+.java-editor__test-cases-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .java-editor__test-cases strong {
   font-size: 0.875rem;
   font-weight: 600;
   color: #0f172a;
-  display: block;
-  margin-bottom: 0.5rem;
+}
+
+.java-editor__test-case-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.java-editor__test-case-counter {
+  font-size: 0.8125rem;
+  color: #64748b;
+  font-weight: 500;
+  min-width: 3rem;
+  text-align: center;
+}
+
+.java-editor__test-case-nav-btn {
+  padding: 0.375rem 0.75rem;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.java-editor__test-case-nav-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.java-editor__test-case-nav-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.java-editor__test-case-single {
+  margin-top: 0.5rem;
+}
+
+.java-editor__test-case-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: white;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+}
+
+.java-editor__test-case-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.java-editor__test-case-content > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.java-editor__test-case-content strong {
+  font-size: 0.8125rem;
+  color: #475569;
+  font-weight: 600;
+}
+
+.java-editor__test-case-pre {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  overflow-x: auto;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+  font-size: 0.8125rem;
+  color: #0f172a;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.java-editor__test-case-pre code {
+  background: transparent;
+  padding: 0;
+  border: none;
+  font-size: inherit;
+  color: inherit;
 }
 
 .java-editor__test-cases ul {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
   font-size: 0.875rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.java-editor__test-cases li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.75rem;
+  background: white;
+  border-radius: 0.375rem;
+  border: 1px solid #e2e8f0;
+}
+
+.java-editor__test-case-label {
+  font-weight: 600;
+  color: #475569;
+  font-size: 0.8125rem;
+}
+
+.java-editor__test-case-input,
+.java-editor__test-case-output {
+  display: block;
+  color: #64748b;
+  font-size: 0.8125rem;
+}
+
+.java-editor__test-case-input code,
+.java-editor__test-case-output code {
+  background: #f1f5f9;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
 }
 
 .java-editor__test-cases code,
@@ -1242,6 +1550,20 @@ code {
 .java-editor__btn--submit:hover:not(:disabled) {
   background: linear-gradient(135deg, #047857 0%, #065f46 100%);
   box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
+  transform: translateY(-2px);
+}
+
+.java-editor__btn--evaluate {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  border-color: #3b82f6;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+}
+
+.java-editor__btn--evaluate:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
   transform: translateY(-2px);
 }
 
@@ -1493,4 +1815,860 @@ a:hover {
 
 .java-editor__dialog-actions .java-editor__btn {
   flex: 1;
+}
+
+/* Java AI Evaluation (Separate Section) */
+.java-ai-evaluation {
+  background: white;
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.java-ai-evaluation__header {
+  margin-bottom: 1.5rem;
+}
+
+.java-ai-evaluation__header h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+
+.java-ai-evaluation__content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.java-ai-evaluation__score {
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  color: #065f46;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.java-ai-evaluation__score-label {
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.java-ai-evaluation__score-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.java-ai-evaluation__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.java-ai-evaluation__section-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.java-ai-evaluation__list {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #475569;
+  list-style-type: disc;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.java-ai-evaluation__list li {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.java-ai-evaluation__test-summary {
+  font-size: 0.875rem;
+  color: #475569;
+  margin: 0.5rem 0 0 0;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border-radius: 0.375rem;
+  border: 1px solid #e2e8f0;
+  font-weight: 500;
+}
+
+.java-ai-evaluation__analysis {
+  font-size: 0.875rem;
+  color: #475569;
+  line-height: 1.6;
+  margin: 0;
+}
+
+@media (min-width: 1024px) {
+  .java-ai-evaluation {
+    padding: 2rem;
+    margin-top: 2rem;
+  }
+  
+  .java-ai-evaluation__content {
+    gap: 1.5rem;
+  }
+  
+  .java-ai-evaluation__score {
+    padding: 1.25rem 1.5rem;
+  }
+  
+  .java-ai-evaluation__score-value {
+    font-size: 1.75rem;
+  }
+  
+  .java-ai-evaluation__section-title {
+    font-size: 1rem;
+  }
+  
+  .java-ai-evaluation__list li {
+    font-size: 0.9375rem;
+  }
+  
+  .java-ai-evaluation__analysis {
+    font-size: 0.9375rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .java-ai-evaluation {
+    padding: 2.5rem;
+  }
+  
+  .java-ai-evaluation__content {
+    gap: 2rem;
+  }
+}
+
+/* Java Practice Questions (Separate Section) */
+.java-practice-questions {
+  background: white;
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.java-practice-questions__header {
+  margin-bottom: 1rem;
+}
+
+.java-practice-questions__header h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+
+.java-practice-questions__content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.java-practice-questions__item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.java-practice-questions__item:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.java-practice-questions__item strong {
+  display: block;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 0.5rem;
+}
+
+.java-practice-questions__item p {
+  font-size: 0.875rem;
+  color: #475569;
+  margin: 0;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+@media (min-width: 1024px) {
+  .java-practice-questions {
+    padding: 2rem;
+    margin-top: 2rem;
+  }
+  
+  .java-practice-questions__content {
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  
+  .java-practice-questions__item {
+    padding: 1.25rem;
+    min-height: 100px;
+  }
+  
+  .java-practice-questions__item strong {
+    font-size: 1rem;
+  }
+  
+  .java-practice-questions__item p {
+    font-size: 0.9375rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .java-practice-questions {
+    padding: 2.5rem;
+  }
+  
+  .java-practice-questions__content {
+    gap: 1.5rem;
+  }
+  
+  .java-practice-questions__item {
+    padding: 1.5rem;
+    min-height: 120px;
+  }
+}
+
+/* Practice Subject Cards */
+.practice-subject-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.practice-subject-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.practice-subject-card--java {
+  border-color: #e2e8f0;
+}
+
+.practice-subject-card--java:hover {
+  border-color: #059669;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.15);
+}
+
+.practice-subject-card--web {
+  opacity: 1;
+  cursor: pointer;
+}
+
+.practice-subject-card--web:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+  border-color: #6366f1;
+}
+
+.practice-subject-icon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.practice-subject-icon--maths {
+  background: #dbeafe;
+}
+
+.practice-subject-icon--java {
+  background: #d1fae5;
+}
+
+.practice-subject-icon--web {
+  background: #f1f5f9;
+}
+
+@media (min-width: 768px) {
+  .practice-subject-card {
+    padding: 2rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .practice-subject-card {
+    padding: 2.5rem;
+  }
+  
+  .practice-subject-icon {
+    width: 4rem;
+    height: 4rem;
+  }
+}
+
+/* Maths Quiz Modal Styles */
+.quiz-modal-container {
+  background: white;
+  border-radius: 1rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  max-height: 90vh;
+  overflow-y: auto;
+  width: 90%;
+  max-width: 28rem; /* 448px - small screens */
+}
+
+@media (min-width: 640px) {
+  .quiz-modal-container {
+    width: 32rem; /* 512px - medium screens */
+    max-width: 32rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .quiz-modal-container {
+    width: 36rem; /* 576px - large screens */
+    max-width: 36rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .quiz-modal-container {
+    width: 40rem; /* 640px - xl screens */
+    max-width: 40rem;
+  }
+}
+
+.quiz-modal-header {
+  position: sticky;
+  top: 0;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 1.5rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+}
+
+.quiz-modal-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.quiz-modal-close {
+  color: #94a3b8;
+  font-size: 2rem;
+  font-weight: 300;
+  line-height: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.quiz-modal-close:hover {
+  color: #475569;
+}
+
+.quiz-modal-content {
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .quiz-modal-content {
+    padding: 2.5rem;
+    gap: 2rem;
+  }
+}
+
+.quiz-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.quiz-form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #334155;
+  margin-bottom: 0.5rem;
+}
+
+@media (min-width: 1024px) {
+  .quiz-form-label {
+    font-size: 1rem;
+  }
+}
+
+.quiz-form-textarea {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  resize: none;
+  transition: all 0.2s ease;
+  background: white;
+  color: #0f172a;
+}
+
+.quiz-form-textarea:focus {
+  outline: none;
+  border-color: #059669;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+}
+
+.quiz-form-textarea::placeholder {
+  color: #94a3b8;
+}
+
+@media (min-width: 1024px) {
+  .quiz-form-textarea {
+    padding: 1rem 1.25rem;
+    font-size: 1rem;
+  }
+}
+
+.quiz-form-select {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  background: white;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+}
+
+.quiz-form-select:focus {
+  outline: none;
+  border-color: #059669;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+}
+
+@media (min-width: 1024px) {
+  .quiz-form-select {
+    padding: 1rem 1.25rem;
+    padding-right: 3rem;
+    font-size: 1rem;
+  }
+}
+
+.quiz-form-value {
+  color: #059669;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .quiz-form-value {
+    font-size: 1.125rem;
+  }
+}
+
+.quiz-form-slider {
+  width: 100%;
+  height: 0.5rem;
+  border-radius: 0.25rem;
+  background: #e2e8f0;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.quiz-form-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: #059669;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.quiz-form-slider::-webkit-slider-thumb:hover {
+  background: #047857;
+  transform: scale(1.1);
+}
+
+.quiz-form-slider::-moz-range-thumb {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: #059669;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.quiz-form-slider::-moz-range-thumb:hover {
+  background: #047857;
+  transform: scale(1.1);
+}
+
+@media (min-width: 1024px) {
+  .quiz-form-slider {
+    height: 0.625rem;
+  }
+  
+  .quiz-form-slider::-webkit-slider-thumb {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  
+  .quiz-form-slider::-moz-range-thumb {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+}
+
+.quiz-form-slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.5rem;
+}
+
+@media (min-width: 1024px) {
+  .quiz-form-slider-labels {
+    font-size: 0.875rem;
+  }
+}
+
+.quiz-form-submit {
+  width: 100%;
+  background: #059669;
+  color: white;
+  font-weight: 500;
+  padding: 0.875rem 1rem;
+  border-radius: 0.5rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  margin-top: 0.5rem;
+}
+
+.quiz-form-submit:hover:not(:disabled) {
+  background: #047857;
+}
+
+.quiz-form-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (min-width: 1024px) {
+  .quiz-form-submit {
+    padding: 1rem 1.25rem;
+    font-size: 1rem;
+  }
+}
+
+/* Maths Quiz Styles */
+.quiz-question-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.quiz-question-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: white;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 1.125rem;
+  flex-shrink: 0;
+}
+
+.quiz-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.quiz-option:hover {
+  border-color: #059669;
+  background: #f0fdf4;
+}
+
+.quiz-option-selected {
+  border-color: #059669;
+  background: #f0fdf4;
+}
+
+.quiz-option-correct {
+  border-color: #10b981;
+  background: #d1fae5;
+}
+
+.quiz-option-incorrect {
+  border-color: #ef4444;
+  background: #fee2e2;
+}
+
+.quiz-radio {
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: pointer;
+}
+
+.quiz-option-label {
+  flex: 1;
+  font-size: 0.9375rem;
+  color: #0f172a;
+}
+
+.quiz-correct-badge {
+  padding: 0.25rem 0.75rem;
+  background: #10b981;
+  color: white;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.quiz-incorrect-badge {
+  padding: 0.25rem 0.75rem;
+  background: #ef4444;
+  color: white;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.quiz-explanation {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-left: 4px solid #059669;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: #475569;
+  line-height: 1.6;
+}
+
+/* Quiz Results Summary */
+.quiz-results-summary {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border: 2px solid #10b981;
+  border-radius: 1rem;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.quiz-results-header {
+  margin-bottom: 1.5rem;
+}
+
+.quiz-results-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.quiz-stat-card {
+  background: white;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.quiz-stat-card--score {
+  border-top: 4px solid #10b981;
+}
+
+.quiz-stat-card--marks {
+  border-top: 4px solid #059669;
+}
+
+.quiz-stat-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #059669;
+  margin-bottom: 0.5rem;
+}
+
+.quiz-stat-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.quiz-success-message,
+.quiz-good-message,
+.quiz-improve-message {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+.quiz-success-message {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #10b981;
+}
+
+.quiz-good-message {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #f59e0b;
+}
+
+.quiz-improve-message {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #ef4444;
+}
+
+/* Java Choice Modal Styles */
+.java-choice-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.java-choice-btn {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.java-choice-btn:hover {
+  border-color: #059669;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.15);
+  transform: translateY(-2px);
+}
+
+.java-choice-btn--coding:hover {
+  border-color: #059669;
+  background: #f0fdf4;
+}
+
+.java-choice-btn--quiz:hover {
+  border-color: #6366f1;
+  background: #f5f3ff;
+}
+
+.java-choice-icon {
+  font-size: 2.5rem;
+  flex-shrink: 0;
+}
+
+.java-choice-content {
+  flex: 1;
+}
+
+.java-choice-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 0.25rem;
+}
+
+.java-choice-desc {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.java-choice-arrow {
+  font-size: 1.5rem;
+  color: #94a3b8;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.java-choice-btn:hover .java-choice-arrow {
+  color: #059669;
+  transform: translateX(4px);
+}
+
+@media (min-width: 1024px) {
+  .java-choice-btn {
+    padding: 2rem;
+  }
+  
+  .java-choice-title {
+    font-size: 1.5rem;
+  }
+  
+  .java-choice-desc {
+    font-size: 1rem;
+  }
 }

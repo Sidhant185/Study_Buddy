@@ -14,7 +14,8 @@ import {
   getTopicAnalytics,
   createPracticeTask,
 } from "./services/firestore.js";
-import { generateHistoricalReport, generateHistoricalPracticeQuestions } from "./services/cursorAI.js";
+import { generateHistoricalReport, generateHistoricalPracticeQuestions, generateMathsQuiz, generateWebQuiz, generateJavaQuiz } from "./services/cursorAI.js";
+import { getCachedQuiz, setCachedQuiz } from "./services/cache.js";
 
 const formatTimestamp = (value) => {
   if (!value) return "--";
@@ -93,6 +94,24 @@ const App = () => {
   const [historicalReport, setHistoricalReport] = useState(null);
   const [practiceTasks, setPracticeTasks] = useState([]);
   const [loadingReport, setLoadingReport] = useState(false);
+  
+  // Quiz State (Maths, Web & Java)
+  const [mathsQuizModal, setMathsQuizModal] = useState(false);
+  const [webQuizModal, setWebQuizModal] = useState(false);
+  const [javaQuizModal, setJavaQuizModal] = useState(false);
+  const [javaChoiceModal, setJavaChoiceModal] = useState(false);
+  const [quizForm, setQuizForm] = useState({
+    topic: "",
+    difficulty: "medium",
+    numQuestions: 10,
+    quizType: "maths", // "maths", "web", or "java"
+  });
+  const [generatingQuiz, setGeneratingQuiz] = useState(false);
+  const [quizQuestions, setQuizQuestions] = useState(null);
+  const [quizAnswers, setQuizAnswers] = useState({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [quizScore, setQuizScore] = useState(null);
+  const [refreshingQuiz, setRefreshingQuiz] = useState(null); // Track which quiz is being refreshed
 
   const loadStudentData = useCallback(async () => {
     if (!user?.email) return;
@@ -419,6 +438,63 @@ const App = () => {
 
   const copy = useMemo(() => sectionCopy[activeSection] || sectionCopy.dashboard, [activeSection]);
 
+  // Helper function to get subject-specific analytics
+  const getSubjectAnalytics = useCallback((subjectName) => {
+    const subject = normalizedSubjects.find(
+      (s) => s?.name?.toLowerCase() === subjectName.toLowerCase()
+    );
+    
+    if (!subject || !subject.score || !subject.score.contests) {
+      return {
+        contests: [],
+        totalContests: 0,
+        averageMarks: 0,
+        averageAccuracy: 0,
+      };
+    }
+
+    const contests = subject.score.contests || [];
+    
+    // Get last 3 contests (most recent first)
+    const last3Contests = [...contests]
+      .sort((a, b) => {
+        // Sort by date if available, otherwise by order
+        const dateA = a.date || a.updatedAt || 0;
+        const dateB = b.date || b.updatedAt || 0;
+        return new Date(dateB) - new Date(dateA);
+      })
+      .slice(0, 3);
+
+    // Calculate average marks
+    const totalMarks = contests.reduce((sum, c) => sum + (c.rawScore || 0), 0);
+    const averageMarks = contests.length > 0 
+      ? Number((totalMarks / contests.length).toFixed(2))
+      : 0;
+
+    // Calculate average accuracy (percentage)
+    const totalAccuracy = contests.reduce((sum, c) => {
+      if (c.maxScore && c.maxScore > 0) {
+        return sum + ((c.rawScore || 0) / c.maxScore) * 100;
+      }
+      return sum;
+    }, 0);
+    const averageAccuracy = contests.length > 0
+      ? Number((totalAccuracy / contests.length).toFixed(2))
+      : 0;
+
+    return {
+      contests: last3Contests,
+      totalContests: contests.length,
+      averageMarks,
+      averageAccuracy,
+      subjectName: subject.name,
+    };
+  }, [normalizedSubjects]);
+
+  const mathsAnalytics = useMemo(() => getSubjectAnalytics("Maths"), [getSubjectAnalytics]);
+  const javaAnalytics = useMemo(() => getSubjectAnalytics("Java"), [getSubjectAnalytics]);
+  const webAnalytics = useMemo(() => getSubjectAnalytics("Web"), [getSubjectAnalytics]);
+
   const handleAuthSuccess = (authenticatedUser) => {
     if (!authenticatedUser) return;
     setPendingStudent(null);
@@ -486,6 +562,255 @@ const App = () => {
       const isDesktop = window.matchMedia("(min-width: 1024px)").matches;
       if (!isDesktop) setSidebarOpen(false);
     }
+  };
+
+  // Quiz Handlers (Maths, Web & Java)
+  const handleMathsCardClick = () => {
+    setWebQuizModal(false);
+    setJavaQuizModal(false);
+    setJavaChoiceModal(false);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    setQuizScore(null);
+    
+    // Check cache first - if exists, show quiz directly
+    const cached = getCachedQuiz('maths');
+    if (cached && cached.questions) {
+      setQuizQuestions(cached.questions);
+      setQuizForm({
+        topic: cached.params.topic || "",
+        difficulty: cached.params.difficulty || "medium",
+        numQuestions: cached.params.numQuestions || 10,
+        quizType: "maths",
+      });
+      setMathsQuizModal(false); // Don't show modal
+    } else {
+      // No cache - show modal to generate quiz
+      setMathsQuizModal(true);
+      setQuizQuestions(null);
+      setQuizForm({
+        topic: "",
+        difficulty: "medium",
+        numQuestions: 10,
+        quizType: "maths",
+      });
+    }
+  };
+
+  const handleWebCardClick = () => {
+    setMathsQuizModal(false);
+    setJavaQuizModal(false);
+    setJavaChoiceModal(false);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    setQuizScore(null);
+    
+    // Check cache first - if exists, show quiz directly
+    const cached = getCachedQuiz('web');
+    if (cached && cached.questions) {
+      setQuizQuestions(cached.questions);
+      setQuizForm({
+        topic: cached.params.topic || "",
+        difficulty: cached.params.difficulty || "medium",
+        numQuestions: cached.params.numQuestions || 10,
+        quizType: "web",
+      });
+      setWebQuizModal(false); // Don't show modal
+    } else {
+      // No cache - show modal to generate quiz
+      setWebQuizModal(true);
+      setQuizQuestions(null);
+      setQuizForm({
+        topic: "",
+        difficulty: "medium",
+        numQuestions: 10,
+        quizType: "web",
+      });
+    }
+  };
+
+  // Java Card Handler - Shows choice modal
+  const handleJavaCardClick = () => {
+    setJavaChoiceModal(true);
+    setMathsQuizModal(false);
+    setWebQuizModal(false);
+    setJavaQuizModal(false);
+  };
+
+  // Java Coding Option - Navigate to Java Editor
+  const handleJavaCoding = () => {
+    setJavaChoiceModal(false);
+    handleNavSelect("java");
+  };
+
+  // Java Quiz Option - Open quiz modal
+  const handleJavaQuizClick = () => {
+    setJavaChoiceModal(false);
+    setMathsQuizModal(false);
+    setWebQuizModal(false);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    setQuizScore(null);
+    
+    // Check cache first - if exists, show quiz directly
+    const cached = getCachedQuiz('java');
+    if (cached && cached.questions) {
+      setQuizQuestions(cached.questions);
+      setQuizForm({
+        topic: cached.params.topic || "",
+        difficulty: cached.params.difficulty || "medium",
+        numQuestions: cached.params.numQuestions || 10,
+        quizType: "java",
+      });
+      setJavaQuizModal(false); // Don't show modal
+    } else {
+      // No cache - show modal to generate quiz
+      setJavaQuizModal(true);
+      setQuizQuestions(null);
+      setQuizForm({
+        topic: "",
+        difficulty: "medium",
+        numQuestions: 10,
+        quizType: "java",
+      });
+    }
+  };
+
+  const handleGenerateQuiz = async (forceRefresh = false) => {
+    if (!quizForm.topic.trim()) {
+      const subjectName = quizForm.quizType === "maths" ? "maths" 
+        : quizForm.quizType === "web" ? "web development" 
+        : "Java programming";
+      alert(`Please enter a ${subjectName} topic`);
+      return;
+    }
+
+    // Check cache first if not forcing refresh
+    if (!forceRefresh) {
+      const cached = getCachedQuiz(quizForm.quizType);
+      if (cached && 
+          cached.params.topic === quizForm.topic.trim() &&
+          cached.params.difficulty === quizForm.difficulty &&
+          cached.params.numQuestions === quizForm.numQuestions) {
+        setQuizQuestions(cached.questions);
+        setMathsQuizModal(false);
+        setWebQuizModal(false);
+        setJavaQuizModal(false);
+        return;
+      }
+    }
+
+    setGeneratingQuiz(true);
+    try {
+      let questions;
+      if (quizForm.quizType === "maths") {
+        questions = await generateMathsQuiz({
+          topic: quizForm.topic.trim(),
+          difficulty: quizForm.difficulty,
+          numQuestions: quizForm.numQuestions,
+        });
+      } else if (quizForm.quizType === "web") {
+        questions = await generateWebQuiz({
+          topic: quizForm.topic.trim(),
+          difficulty: quizForm.difficulty,
+          numQuestions: quizForm.numQuestions,
+        });
+      } else { // java
+        questions = await generateJavaQuiz({
+          topic: quizForm.topic.trim(),
+          difficulty: quizForm.difficulty,
+          numQuestions: quizForm.numQuestions,
+        });
+      }
+      
+      // Cache the generated quiz
+      setCachedQuiz(quizForm.quizType, {
+        questions,
+        params: {
+          topic: quizForm.topic.trim(),
+          difficulty: quizForm.difficulty,
+          numQuestions: quizForm.numQuestions,
+        },
+      });
+      
+      setQuizQuestions(questions);
+      setMathsQuizModal(false);
+      setWebQuizModal(false);
+      setJavaQuizModal(false);
+    } catch (error) {
+      console.error("Failed to generate quiz", error);
+      alert(`Failed to generate quiz: ${error.message}`);
+    } finally {
+      setGeneratingQuiz(false);
+      setRefreshingQuiz(null);
+    }
+  };
+
+  // Handle refresh button click for quiz cards
+  const handleRefreshQuiz = (quizType, e) => {
+    if (e) {
+      e.stopPropagation(); // Prevent opening modal from card click
+    }
+    
+    // Set the quiz form type
+    setQuizForm(prev => ({
+      ...prev,
+      quizType,
+    }));
+    
+    // Get cached params to pre-fill form, or use defaults
+    const cached = getCachedQuiz(quizType);
+    if (cached) {
+      setQuizForm(prev => ({
+        ...prev,
+        topic: cached.params.topic || "",
+        difficulty: cached.params.difficulty || "medium",
+        numQuestions: cached.params.numQuestions || 10,
+        quizType,
+      }));
+    } else {
+      setQuizForm(prev => ({
+        ...prev,
+        topic: "",
+        difficulty: "medium",
+        numQuestions: 10,
+        quizType,
+      }));
+    }
+    
+    // Open appropriate modal to ask for topic, difficulty, and numQuestions
+    if (quizType === "maths") {
+      setMathsQuizModal(true);
+      setWebQuizModal(false);
+      setJavaQuizModal(false);
+    } else if (quizType === "web") {
+      setWebQuizModal(true);
+      setMathsQuizModal(false);
+      setJavaQuizModal(false);
+    } else {
+      setJavaQuizModal(true);
+      setMathsQuizModal(false);
+      setWebQuizModal(false);
+    }
+  };
+
+  const handleAnswerSelect = (questionId, answer) => {
+    setQuizAnswers(prev => ({ ...prev, [questionId]: answer }));
+  };
+
+  const handleSubmitQuiz = () => {
+    if (!quizQuestions) return;
+    
+    let correct = 0;
+    quizQuestions.forEach(q => {
+      if (quizAnswers[q.id] === q.correctAnswer) {
+        correct++;
+      }
+    });
+    
+    const score = Math.round((correct / quizQuestions.length) * 100);
+    setQuizScore({ correct, total: quizQuestions.length, percentage: score });
+    setQuizSubmitted(true);
   };
 
   const renderDashboard = () => {
@@ -684,6 +1009,7 @@ const App = () => {
   };
 
   const renderSubjects = () => (
+    <>
     <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 md:p-8">
       <div className="flex justify-between items-start gap-4 flex-wrap mb-6">
         <div>
@@ -758,6 +1084,428 @@ const App = () => {
         </p>
       )}
     </section>
+
+    {/* Practice Questions Section */}
+    <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 md:p-8 mt-6">
+      <div className="mb-6">
+        <p className="text-xs uppercase tracking-wider text-slate-500 mb-1">Practice Questions</p>
+        <h2 className="text-xl font-bold text-slate-900">Subject Practice Areas</h2>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Maths Card */}
+        <div 
+          onClick={handleMathsCardClick}
+          className="practice-subject-card practice-subject-card--maths"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="practice-subject-icon practice-subject-icon--maths">
+                <span className="text-2xl font-bold text-blue-600">M</span>
+              </div>
+              <h4 className="text-lg font-semibold text-slate-900">Maths</h4>
+            </div>
+            <button
+              onClick={(e) => handleRefreshQuiz('maths', e)}
+              disabled={refreshingQuiz === 'maths'}
+              className="practice-subject-card__refresh-btn"
+              title="Refresh quiz"
+            >
+              {refreshingQuiz === 'maths' ? (
+                <span className="animate-spin">⏳</span>
+              ) : (
+                <span>🔄</span>
+              )}
+            </button>
+          </div>
+          <p className="text-sm text-slate-600">Click to generate quiz</p>
+        </div>
+
+        {/* Java Card */}
+        <div 
+          onClick={handleJavaCardClick}
+          className="practice-subject-card practice-subject-card--java"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="practice-subject-icon practice-subject-icon--java">
+                <span className="text-2xl font-bold text-emerald-600">J</span>
+              </div>
+              <h4 className="text-lg font-semibold text-slate-900">Java</h4>
+            </div>
+            <button
+              onClick={(e) => handleRefreshQuiz('java', e)}
+              disabled={refreshingQuiz === 'java'}
+              className="practice-subject-card__refresh-btn"
+              title="Refresh quiz"
+            >
+              {refreshingQuiz === 'java' ? (
+                <span className="animate-spin">⏳</span>
+              ) : (
+                <span>🔄</span>
+              )}
+            </button>
+          </div>
+          <p className="text-sm text-slate-600">Click to choose option</p>
+        </div>
+
+        {/* Web Card */}
+        <div 
+          onClick={handleWebCardClick}
+          className="practice-subject-card practice-subject-card--web"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="practice-subject-icon practice-subject-icon--web">
+                <span className="text-2xl font-bold text-slate-600">W</span>
+              </div>
+              <h4 className="text-lg font-semibold text-slate-900">Web</h4>
+            </div>
+            <button
+              onClick={(e) => handleRefreshQuiz('web', e)}
+              disabled={refreshingQuiz === 'web'}
+              className="practice-subject-card__refresh-btn"
+              title="Refresh quiz"
+            >
+              {refreshingQuiz === 'web' ? (
+                <span className="animate-spin">⏳</span>
+              ) : (
+                <span>🔄</span>
+              )}
+            </button>
+          </div>
+          <p className="text-sm text-slate-600">Click to generate quiz</p>
+        </div>
+      </div>
+    </section>
+
+    {/* Java Choice Modal */}
+    {javaChoiceModal && (
+      <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="quiz-modal-container">
+          <div className="quiz-modal-header">
+            <h3 className="quiz-modal-title">Choose Java Option</h3>
+            <button
+              onClick={() => setJavaChoiceModal(false)}
+              className="quiz-modal-close"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
+          
+          <div className="quiz-modal-content">
+            <div className="java-choice-options">
+              <button
+                onClick={handleJavaCoding}
+                className="java-choice-btn java-choice-btn--coding"
+              >
+                <div className="java-choice-icon">💻</div>
+                <div className="java-choice-content">
+                  <h4 className="java-choice-title">Coding</h4>
+                  <p className="java-choice-desc">Practice coding with Java Editor</p>
+                </div>
+                <div className="java-choice-arrow">→</div>
+              </button>
+              
+              <button
+                onClick={handleJavaQuizClick}
+                className="java-choice-btn java-choice-btn--quiz"
+              >
+                <div className="java-choice-icon">📝</div>
+                <div className="java-choice-content">
+                  <h4 className="java-choice-title">Quiz</h4>
+                  <p className="java-choice-desc">Test your Java knowledge</p>
+                </div>
+                <div className="java-choice-arrow">→</div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Quiz Generation Modal (Maths, Web & Java) */}
+    {(mathsQuizModal || webQuizModal || javaQuizModal) && (
+      <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="quiz-modal-container">
+          <div className="quiz-modal-header">
+            <h3 className="quiz-modal-title">
+              Generate {
+                quizForm.quizType === "maths" ? "Maths" 
+                : quizForm.quizType === "web" ? "Web Development" 
+                : "Java Programming"
+              } Quiz
+            </h3>
+            <button
+              onClick={() => {
+                setMathsQuizModal(false);
+                setWebQuizModal(false);
+                setJavaQuizModal(false);
+              }}
+              className="quiz-modal-close"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
+          
+          <div className="quiz-modal-content">
+            <div className="quiz-form-group">
+              <label className="quiz-form-label">
+                Topic <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={quizForm.topic}
+                onChange={(e) => setQuizForm(prev => ({ ...prev, topic: e.target.value }))}
+                placeholder={
+                  quizForm.quizType === "maths" 
+                    ? "e.g., Algebra, Calculus, Geometry, Trigonometry, Statistics..."
+                    : quizForm.quizType === "web"
+                    ? "e.g., HTML, CSS, JavaScript, React, Node.js, TypeScript..."
+                    : "e.g., OOP, Collections, Multithreading, Streams, Spring, JVM..."
+                }
+                className="quiz-form-textarea"
+                rows="3"
+              />
+            </div>
+
+            <div className="quiz-form-group">
+              <label className="quiz-form-label">
+                Difficulty
+              </label>
+              <select
+                value={quizForm.difficulty}
+                onChange={(e) => setQuizForm(prev => ({ ...prev, difficulty: e.target.value }))}
+                className="quiz-form-select"
+              >
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+
+            <div className="quiz-form-group">
+              <label className="quiz-form-label">
+                Number of Questions: <span className="quiz-form-value">{quizForm.numQuestions}</span>
+              </label>
+              <input
+                type="range"
+                min="5"
+                max="10"
+                value={quizForm.numQuestions}
+                onChange={(e) => setQuizForm(prev => ({ ...prev, numQuestions: parseInt(e.target.value) }))}
+                className="quiz-form-slider"
+              />
+              <div className="quiz-form-slider-labels">
+                <span>5</span>
+                <span>10</span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleGenerateQuiz}
+              disabled={generatingQuiz || !quizForm.topic.trim()}
+              className="quiz-form-submit"
+            >
+              {generatingQuiz ? (
+                <>
+                  <span className="animate-spin">⏳</span>
+                  Generating Quiz...
+                </>
+              ) : (
+                "Generate Quiz"
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Quiz Display */}
+    {quizQuestions && (
+      <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 md:p-8 mt-6">
+        {!quizSubmitted ? (
+          <>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">
+                  {
+                    quizForm.quizType === "maths" ? "Maths" 
+                    : quizForm.quizType === "web" ? "Web Development" 
+                    : "Java Programming"
+                  } Quiz: {quizForm.topic}
+                </h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  {quizForm.difficulty.charAt(0).toUpperCase() + quizForm.difficulty.slice(1)} • {quizQuestions.length} questions
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              {quizQuestions.map((q, index) => {
+                const userAnswer = quizAnswers[q.id];
+                return (
+                  <div key={q.id} className="quiz-question-card">
+                    <div className="flex items-start gap-3">
+                      <span className="quiz-question-number">{index + 1}</span>
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-slate-900 mb-4">{q.question}</h3>
+                        <div className="space-y-2">
+                          {Object.entries(q.options).map(([option, text]) => {
+                            const isSelected = userAnswer === option;
+                            return (
+                              <label 
+                                key={option} 
+                                className={`quiz-option ${isSelected ? 'quiz-option-selected' : ''}`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`question-${q.id}`}
+                                  value={option}
+                                  checked={isSelected}
+                                  onChange={() => handleAnswerSelect(q.id, option)}
+                                  className="quiz-radio"
+                                />
+                                <span className="quiz-option-label">{option}. {text}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-8 flex justify-end">
+              <button
+                onClick={handleSubmitQuiz}
+                disabled={Object.keys(quizAnswers).length !== quizQuestions.length}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-8 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Submit Quiz
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Results Summary Card */}
+            <div className="quiz-results-summary">
+              <div className="quiz-results-header">
+                <h2 className="text-2xl font-bold text-slate-900">Quiz Results</h2>
+                <p className="text-sm text-slate-600 mt-1">Topic: {quizForm.topic}</p>
+              </div>
+              
+              <div className="quiz-results-stats">
+                <div className="quiz-stat-card quiz-stat-card--score">
+                  <div className="quiz-stat-value">{quizScore.percentage}%</div>
+                  <div className="quiz-stat-label">Accuracy</div>
+                </div>
+                <div className="quiz-stat-card quiz-stat-card--marks">
+                  <div className="quiz-stat-value">{quizScore.correct}/{quizScore.total}</div>
+                  <div className="quiz-stat-label">Marks</div>
+                </div>
+              </div>
+
+              {quizScore.percentage >= 80 && (
+                <div className="quiz-success-message">
+                  🎉 Excellent work! You have a strong understanding of this topic.
+                </div>
+              )}
+              {quizScore.percentage >= 60 && quizScore.percentage < 80 && (
+                <div className="quiz-good-message">
+                  👍 Good job! Keep practicing to improve further.
+                </div>
+              )}
+              {quizScore.percentage < 60 && (
+                <div className="quiz-improve-message">
+                  💪 Keep practicing! Review the explanations below to strengthen your understanding.
+                </div>
+              )}
+            </div>
+
+            {/* Questions with answers */}
+            <div className="space-y-6 mt-8">
+              {quizQuestions.map((q, index) => {
+                const userAnswer = quizAnswers[q.id];
+                return (
+                  <div key={q.id} className="quiz-question-card">
+                    <div className="flex items-start gap-3">
+                      <span className="quiz-question-number">{index + 1}</span>
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-slate-900 mb-4">{q.question}</h3>
+                        <div className="space-y-2">
+                          {Object.entries(q.options).map(([option, text]) => {
+                            const isSelected = userAnswer === option;
+                            const isCorrect = option === q.correctAnswer;
+                            let optionClass = "quiz-option";
+
+                            if (isCorrect) {
+                              optionClass += " quiz-option-correct";
+                            } else if (isSelected && !isCorrect) {
+                              optionClass += " quiz-option-incorrect";
+                            }
+
+                            return (
+                              <label key={option} className={optionClass}>
+                                <input
+                                  type="radio"
+                                  name={`question-${q.id}`}
+                                  value={option}
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                  disabled
+                                  className="quiz-radio"
+                                />
+                                <span className="quiz-option-label">{option}. {text}</span>
+                                {isCorrect && (
+                                  <span className="quiz-correct-badge">✓ Correct</span>
+                                )}
+                                {isSelected && !isCorrect && (
+                                  <span className="quiz-incorrect-badge">✗ Your Answer</span>
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
+                        {q.explanation && (
+                          <div className="quiz-explanation">
+                            <strong>Explanation:</strong> {q.explanation}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-8 text-center">
+              <button
+                onClick={() => {
+                  setQuizQuestions(null);
+                  setQuizAnswers({});
+                  setQuizSubmitted(false);
+                  setQuizScore(null);
+                  if (quizForm.quizType === "maths") {
+                    setMathsQuizModal(true);
+                  } else if (quizForm.quizType === "web") {
+                    setWebQuizModal(true);
+                  } else {
+                    setJavaQuizModal(true);
+                  }
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-8 rounded-lg transition-colors"
+              >
+                Generate New Quiz
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+    )}
+    </>
   );
 
   const analyticsCards = [
@@ -818,6 +1566,189 @@ const App = () => {
           </div>
         )}
       </section>
+
+      {/* Subject-Specific Analytics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-10 mt-8">
+        {/* Maths Analytics */}
+        <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 md:p-8">
+          <div className="mb-6">
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Maths</h3>
+            <p className="text-xs text-slate-500">Subject Performance</p>
+          </div>
+          
+          {mathsAnalytics.totalContests > 0 ? (
+            <>
+              {/* Summary Stats */}
+              <div className="flex flex-row gap-3 mb-6">
+                <div className="flex-1 bg-slate-50 rounded-lg p-4 border border-slate-200 min-w-0">
+                  <p className="text-xs text-slate-600 mb-1.5">Total</p>
+                  <p className="text-lg font-semibold text-slate-900">{mathsAnalytics.totalContests}</p>
+                </div>
+                <div className="flex-1 bg-slate-50 rounded-lg p-4 border border-slate-200 min-w-0">
+                  <p className="text-xs text-slate-600 mb-1.5">Avg Marks</p>
+                  <p className="text-lg font-semibold text-slate-900">{mathsAnalytics.averageMarks.toFixed(1)}</p>
+                </div>
+                <div className="flex-1 bg-slate-50 rounded-lg p-4 border border-slate-200 min-w-0">
+                  <p className="text-xs text-slate-600 mb-1.5">Avg Accuracy</p>
+                  <p className="text-lg font-semibold text-slate-900">{mathsAnalytics.averageAccuracy.toFixed(1)}%</p>
+                </div>
+              </div>
+
+              {/* Last 3 Contests Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className="text-left py-3 px-3 font-semibold text-slate-700">Contest</th>
+                      <th className="text-left py-3 px-3 font-semibold text-slate-700">Date</th>
+                      <th className="text-right py-3 px-3 font-semibold text-slate-700">Marks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mathsAnalytics.contests.map((contest, idx) => (
+                      <tr key={contest.contestId || idx} className="border-b border-slate-100">
+                        <td className="py-3 px-3 text-slate-900">
+                          {contest.contestTitle || "Contest"}
+                        </td>
+                        <td className="py-3 px-3 text-slate-600">
+                          {formatTimestamp(contest.date || contest.updatedAt)}
+                        </td>
+                        <td className="py-3 px-3 text-right font-medium text-slate-900">
+                          {contest.rawScore || 0} / {contest.maxScore || 0}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="p-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-slate-600 text-sm text-center">
+              No contests recorded yet
+            </div>
+          )}
+        </section>
+
+        {/* Java Analytics */}
+        <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 md:p-8">
+          <div className="mb-6">
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Java</h3>
+            <p className="text-xs text-slate-500">Subject Performance</p>
+          </div>
+          
+          {javaAnalytics.totalContests > 0 ? (
+            <>
+              {/* Summary Stats */}
+              <div className="flex flex-row gap-3 mb-6">
+                <div className="flex-1 bg-slate-50 rounded-lg p-4 border border-slate-200 min-w-0">
+                  <p className="text-xs text-slate-600 mb-1.5">Total</p>
+                  <p className="text-lg font-semibold text-slate-900">{javaAnalytics.totalContests}</p>
+                </div>
+                <div className="flex-1 bg-slate-50 rounded-lg p-4 border border-slate-200 min-w-0">
+                  <p className="text-xs text-slate-600 mb-1.5">Avg Marks</p>
+                  <p className="text-lg font-semibold text-slate-900">{javaAnalytics.averageMarks.toFixed(1)}</p>
+                </div>
+                <div className="flex-1 bg-slate-50 rounded-lg p-4 border border-slate-200 min-w-0">
+                  <p className="text-xs text-slate-600 mb-1.5">Avg Accuracy</p>
+                  <p className="text-lg font-semibold text-slate-900">{javaAnalytics.averageAccuracy.toFixed(1)}%</p>
+                </div>
+              </div>
+
+              {/* Last 3 Contests Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className="text-left py-3 px-3 font-semibold text-slate-700">Contest</th>
+                      <th className="text-left py-3 px-3 font-semibold text-slate-700">Date</th>
+                      <th className="text-right py-3 px-3 font-semibold text-slate-700">Marks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {javaAnalytics.contests.map((contest, idx) => (
+                      <tr key={contest.contestId || idx} className="border-b border-slate-100">
+                        <td className="py-3 px-3 text-slate-900">
+                          {contest.contestTitle || "Contest"}
+                        </td>
+                        <td className="py-3 px-3 text-slate-600">
+                          {formatTimestamp(contest.date || contest.updatedAt)}
+                        </td>
+                        <td className="py-3 px-3 text-right font-medium text-slate-900">
+                          {contest.rawScore || 0} / {contest.maxScore || 0}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="p-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-slate-600 text-sm text-center">
+              No contests recorded yet
+            </div>
+          )}
+        </section>
+
+        {/* Web Dev Analytics */}
+        <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 md:p-8">
+          <div className="mb-6">
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Web Dev</h3>
+            <p className="text-xs text-slate-500">Subject Performance</p>
+          </div>
+          
+          {webAnalytics.totalContests > 0 ? (
+            <>
+              {/* Summary Stats */}
+              <div className="flex flex-row gap-3 mb-6">
+                <div className="flex-1 bg-slate-50 rounded-lg p-4 border border-slate-200 min-w-0">
+                  <p className="text-xs text-slate-600 mb-1.5">Total</p>
+                  <p className="text-lg font-semibold text-slate-900">{webAnalytics.totalContests}</p>
+                </div>
+                <div className="flex-1 bg-slate-50 rounded-lg p-4 border border-slate-200 min-w-0">
+                  <p className="text-xs text-slate-600 mb-1.5">Avg Marks</p>
+                  <p className="text-lg font-semibold text-slate-900">{webAnalytics.averageMarks.toFixed(1)}</p>
+                </div>
+                <div className="flex-1 bg-slate-50 rounded-lg p-4 border border-slate-200 min-w-0">
+                  <p className="text-xs text-slate-600 mb-1.5">Avg Accuracy</p>
+                  <p className="text-lg font-semibold text-slate-900">{webAnalytics.averageAccuracy.toFixed(1)}%</p>
+                </div>
+              </div>
+
+              {/* Last 3 Contests Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className="text-left py-3 px-3 font-semibold text-slate-700">Contest</th>
+                      <th className="text-left py-3 px-3 font-semibold text-slate-700">Date</th>
+                      <th className="text-right py-3 px-3 font-semibold text-slate-700">Marks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {webAnalytics.contests.map((contest, idx) => (
+                      <tr key={contest.contestId || idx} className="border-b border-slate-100">
+                        <td className="py-3 px-3 text-slate-900">
+                          {contest.contestTitle || "Contest"}
+                        </td>
+                        <td className="py-3 px-3 text-slate-600">
+                          {formatTimestamp(contest.date || contest.updatedAt)}
+                        </td>
+                        <td className="py-3 px-3 text-right font-medium text-slate-900">
+                          {contest.rawScore || 0} / {contest.maxScore || 0}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="p-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-slate-600 text-sm text-center">
+              No contests recorded yet
+            </div>
+          )}
+        </section>
+      </div>
 
       {studentRecord && (
         <>
